@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#E30613">
+<title>Eventos · Admin RSB Lisboa</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/rsb-brasao.png">
+<link rel="apple-touch-icon" href="assets/rsb-brasao.png">
+<style>
+  :root {
+    --rsb-vermelho: #E30613;
+    --rsb-vermelho-escuro: #B0040F;
+    --rsb-vermelho-claro: #FCE4E6;
+    --texto: #1a1a1a;
+    --texto-mute: #6b6b6b;
+    --linha: #d8d8d8;
+    --fundo: #f4f4f5;
+    --painel: #ffffff;
+    --verde: #1e8a3a;
+    --verde-claro: #e8f5ec;
+    --aviso: #c46c00;
+    --aviso-claro: #fff8ed;
+    --erro: #b1131e;
+    --erro-claro: #fdf2f3;
+    --info: #2563eb;
+    --info-claro: #eff6ff;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Calibri", sans-serif;
+    color: var(--texto);
+    background: var(--fundo);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--rsb-vermelho);
+    color: #fff;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+  header img { height: 36px; width: auto; }
+  header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+    flex: 1;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  header .sub { font-size: 12px; opacity: 0.85; }
+  header .who { font-size: 12px; opacity: 0.85; cursor: pointer; }
+  header .who:hover { text-decoration: underline; }
+
+  /* ── Tabs ── */
+  nav.tabs {
+    background: #fff;
+    border-bottom: 1px solid var(--linha);
+    display: flex;
+    padding: 0 24px;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  nav.tabs button {
+    background: none;
+    border: none;
+    padding: 14px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--texto-mute);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    font-family: inherit;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  nav.tabs button:hover { color: var(--texto); }
+  nav.tabs button.active {
+    color: var(--rsb-vermelho);
+    border-bottom-color: var(--rsb-vermelho);
+  }
+  nav.tabs button .badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: var(--linha);
+    color: var(--texto);
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  nav.tabs button.active .badge {
+    background: var(--rsb-vermelho);
+    color: #fff;
+  }
+
+  /* ── Sync indicator ── */
+  .sync-bar {
+    background: #fafafa;
+    border-bottom: 1px solid var(--linha);
+    padding: 6px 24px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--texto-mute);
+  }
+  .sync-bar .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--texto-mute);
+  }
+  .sync-bar.ok .dot { background: var(--verde); }
+  .sync-bar.err .dot { background: var(--erro); }
+  .sync-bar.busy .dot { background: var(--aviso); animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* ── Main ── */
+  main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  section.tab-panel { display: none; }
+  section.tab-panel.active { display: block; }
+
+  .panel {
+    background: var(--painel);
+    border: 1px solid var(--linha);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+  .panel h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    color: var(--rsb-vermelho);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .panel .lead {
+    color: var(--texto-mute);
+    margin: 0 0 18px;
+    font-size: 13px;
+  }
+
+  /* ── Forms ── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 20px;
+  }
+  .form-grid .full { grid-column: 1 / -1; }
+  label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--texto-mute);
+    margin-bottom: 4px;
+  }
+  input[type=text], input[type=date], input[type=time], input[type=password], input[type=email],
+  input[type=number], textarea, select {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    border: 1px solid var(--linha);
+    border-radius: 6px;
+    font-family: inherit;
+    background: #fff;
+    color: var(--texto);
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--rsb-vermelho);
+    box-shadow: 0 0 0 3px var(--rsb-vermelho-claro);
+  }
+  textarea { resize: vertical; min-height: 80px; font-family: inherit; }
+  .help {
+    font-size: 11.5px;
+    color: var(--texto-mute);
+    margin-top: 4px;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-family: inherit;
+    background: var(--rsb-vermelho);
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    transition: background 0.15s, transform 0.05s;
+  }
+  .btn:hover { background: var(--rsb-vermelho-escuro); }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn.secondary {
+    background: #fff;
+    color: var(--texto);
+    border-color: var(--linha);
+  }
+  .btn.secondary:hover { background: var(--fundo); }
+  .btn.danger { background: var(--erro); }
+  .btn.danger:hover { background: #8a0e16; }
+  .btn.success { background: var(--verde); }
+  .btn.large { padding: 14px 24px; font-size: 14px; }
+
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+
+  /* ── Alerts ── */
+  .alert {
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 14px;
+    border: 1px solid;
+  }
+  .alert.info  { background: var(--info-claro);  color: var(--info);  border-color: #bfdbfe; }
+  .alert.ok    { background: var(--verde-claro); color: var(--verde); border-color: #b8e0c4; }
+  .alert.warn  { background: var(--aviso-claro); color: var(--aviso); border-color: #f0d4a0; }
+  .alert.erro  { background: var(--erro-claro);  color: var(--erro);  border-color: #f0c0c4; }
+
+  /* ── Tabelas ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    padding: 10px 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--texto-mute);
+    border-bottom: 2px solid var(--linha);
+    background: #fafafa;
+  }
+  td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--linha);
+    vertical-align: middle;
+  }
+  tr.hover:hover { background: #fafafa; }
+  td .small { font-size: 11.5px; color: var(--texto-mute); }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .pill.verde { background: var(--verde-claro); color: var(--verde); }
+  .pill.cinza { background: #f0f0f0; color: var(--texto-mute); }
+  .pill.amarelo { background: var(--aviso-claro); color: var(--aviso); }
+  .pill.vermelho { background: var(--erro-claro); color: var(--erro); }
+
+  /* ── Stats grid ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .stat-card {
+    background: #fff;
+    border: 1px solid var(--linha);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .stat-card .n { font-size: 24px; font-weight: 800; line-height: 1; }
+  .stat-card .l { font-size: 11px; color: var(--texto-mute); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-card.pres .n { color: var(--verde); }
+  .stat-card.aviso .n { color: var(--aviso); }
+
+  /* ── File drop ── */
+  .filedrop {
+    border: 2px dashed var(--linha);
+    border-radius: 8px;
+    padding: 30px 20px;
+    text-align: center;
+    background: #fafafa;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filedrop:hover, .filedrop.drag {
+    border-color: var(--rsb-vermelho);
+    background: var(--rsb-vermelho-claro);
+  }
+  .filedrop input { display: none; }
+  .filedrop .big { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .filedrop .small { color: var(--texto-mute); font-size: 12px; }
+
+  /* ── Modal ── */
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    backdrop-filter: blur(2px);
+  }
+  .modal.hide { display: none; }
+  .modal .card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 24px;
+    max-width: 480px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal h2 { margin: 0 0 16px; color: var(--rsb-vermelho); font-size: 16px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .modal p { margin: 0 0 12px; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--texto);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    z-index: 200;
+    transition: opacity 0.3s, transform 0.3s;
+    opacity: 0;
+    pointer-events: none;
+    max-width: 90vw;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-8px); }
+  .toast.err { background: var(--erro); }
+  .toast.ok { background: var(--verde); }
+
+  /* ── Misc ── */
+  code, .mono {
+    font-family: "SF Mono", Consolas, "Courier New", monospace;
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .row-flex { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; }
+  .nowrap { white-space: nowrap; }
+  .hide { display: none !important; }
+  .truncate { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  hr { border: none; border-top: 1px solid var(--linha); margin: 16px 0; }
+
+  /* ── Loading overlay ── */
+  #loading {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 90;
+  }
+  #loading.hide { display: none; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--linha);
+    border-top-color: var(--rsb-vermelho);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 720px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    main { padding: 16px; }
+    nav.tabs { padding: 0 12px; }
+    nav.tabs button { padding: 12px 12px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="assets/rsb-brasao.png" alt="RSB">
+  <h1>Eventos · Admin <span class="sub" id="evt-titulo-h">RSB Lisboa</span></h1>
+  <button class="menu-btn" id="btn-snapshot" title="Backup de todo o estado actual (zip)" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;font-weight:600;letter-spacing:.04em;text-transform:uppercase">💾 Backup</button>
+  <div class="who" id="who-text" title="Sair" style="margin-left:6px">●</div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="setup" class="active">Setup</button>
+  <button data-tab="inscritos">Inscritos <span class="badge" id="badge-inscritos">0</span></button>
+  <button data-tab="presencas">Presenças <span class="badge" id="badge-presencas">0</span></button>
+  <button data-tab="emissao">Emissão <span class="badge" id="badge-emissao">0</span></button>
+  <button data-tab="envio">Envio <span class="badge" id="badge-envio">0</span></button>
+</nav>
+
+<div class="sync-bar" id="sync-bar"><span class="dot"></span><span id="sync-text">A iniciar…</span></div>
+
+<main>
+
+  <!-- ════════════ SETUP ════════════ -->
+  <section class="tab-panel active" id="tab-setup">
+    <div class="panel">
+      <h2>Configuração do evento</h2>
+      <p class="lead">Metadados do evento usados para emitir certificados e popular a app de presenças. Guardado em <code>data/evento.json</code> (público — sem PII).</p>
+
+      <div class="form-grid">
+        <div>
+          <label>ID do evento</label>
+          <input type="number" id="evt-id" value="1" min="1">
+          <div class="help">Inteiro único. Usado na ligação inscritos ↔ presenças.</div>
+        </div>
+        <div>
+          <label>Data</label>
+          <input type="date" id="evt-data">
+        </div>
+        <div class="full">
+          <label>Título da sessão</label>
+          <input type="text" id="evt-titulo" placeholder="Sessão Técnica em Substâncias Perigosas">
+        </div>
+        <div class="full">
+          <label>Local</label>
+          <input type="text" id="evt-local" placeholder="Auditório do Metropolitano de Lisboa">
+        </div>
+        <div>
+          <label>Hora início</label>
+          <input type="time" id="evt-h-inicio" value="09:00">
+        </div>
+        <div>
+          <label>Hora fim</label>
+          <input type="time" id="evt-h-fim" value="12:00">
+        </div>
+        <div>
+          <label>Carga horária</label>
+          <input type="text" id="evt-carga" placeholder="3 horas">
+        </div>
+        <div>
+          <label>Próximo nº de certificado para o ano</label>
+          <input type="number" id="evt-prox-num" value="1" min="1">
+          <div class="help">Sequencial do ano corrente. Auto-incrementa a cada emissão.</div>
+        </div>
+        <div class="full">
+          <label>Texto da descrição (do certificado)</label>
+          <textarea id="evt-descricao" placeholder="dedicada ao reforço de conhecimentos técnicos e à sensibilização para os riscos associados à intervenção operacional em cenários envolvendo substâncias perigosas."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Assinatura do certificado</h2>
+      <div class="form-grid">
+        <div>
+          <label>Nome</label>
+          <input type="text" id="evt-sig-nome" placeholder="TCor Eng. Alexandre Rodrigues">
+        </div>
+        <div>
+          <label>Cargo</label>
+          <input type="text" id="evt-sig-cargo" placeholder="Comandante do RSBL">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Email — remetente e CC</h2>
+      <div class="form-grid">
+        <div>
+          <label>Remetente (From) — usado nos .eml gerados</label>
+          <input type="email" id="evt-email-from" placeholder="secretariado@rsblisboa.pt">
+        </div>
+        <div>
+          <label>CC fixo (opcional)</label>
+          <input type="email" id="evt-email-cc" placeholder="secretariado@cm-lisboa.pt">
+        </div>
+        <div class="full">
+          <label>Assunto do email</label>
+          <input type="text" id="evt-email-subject" placeholder="Certificado de Participação · {{Titulo}}">
+          <div class="help">Placeholders: <code>{{Nome}}</code>, <code>{{Titulo}}</code>, <code>{{NumeroCertificado}}</code>, <code>{{DataEvento}}</code>.</div>
+        </div>
+        <div class="full">
+          <label>Corpo do email (HTML)</label>
+          <textarea id="evt-email-body" rows="10" style="font-family: 'SF Mono', Consolas, monospace; font-size: 12px;"></textarea>
+          <div class="help">Suporta os mesmos placeholders + <code>{{Cargo}}</code>, <code>{{Entidade}}</code>, <code>{{Link}}</code>, <code>{{Local}}</code>, <code>{{HoraInicio}}</code>, <code>{{HoraFim}}</code>, <code>{{CargaHoraria}}</code>.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Bridge Apps Script (envio automatizado — opcional)</h2>
+      <p class="lead">Envio direto via Gmail/Workspace, sem passar pelo Outlook. Requer deploy de um pequeno Apps Script (ver <code>bridge/apps-script-bridge.gs</code> + README).</p>
+      <div class="form-grid">
+        <div class="full">
+          <label>URL do web app (.../exec)</label>
+          <input type="text" id="evt-bridge-url" placeholder="https://script.google.com/macros/s/AKfycb…/exec">
+          <div class="help">Esta URL fica em <code>evento.json</code> (basta a 1ª vez por evento).</div>
+        </div>
+        <div class="full">
+          <label>Shared secret (sessão actual)</label>
+          <input type="password" id="evt-bridge-secret" placeholder="A mesma string que está no SHARED_SECRET do Apps Script">
+          <div class="help">Em <code>sessionStorage</code> apenas. Cada admin introduz uma vez por sessão.</div>
+        </div>
+        <div class="full">
+          <label>"From" para send-as (opcional)</label>
+          <input type="email" id="evt-bridge-from" placeholder="secretariado@cm-lisboa.pt">
+          <div class="help">Se preencheres, tem de estar na lista <code>ALLOWED_FROM</code> do Apps Script E configurado no Gmail "Send mail as".</div>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:14px">
+        <button class="btn secondary" id="btn-bridge-test">Testar bridge</button>
+        <span id="bridge-status" class="small" style="margin-left:6px"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Segurança</h2>
+      <p class="lead">Chave secreta usada no hash dos certificados. Tem de bater <strong>exactamente</strong> com a constante <code>SECRET</code> em <code>Certificados/index.html</code>.</p>
+      <div class="alert warn" style="margin-bottom:14px">
+        🔒 <strong>Privado por design</strong>: a SECRET é guardada apenas no <code>sessionStorage</code> deste browser, <strong>nunca é publicada</strong> no GitHub. Cada admin tem de a introduzir uma vez por sessão.
+      </div>
+      <div class="form-grid">
+        <div class="full">
+          <label>SECRET_HASH (sessão actual)</label>
+          <input type="password" id="evt-secret" placeholder="RSBLisboa-2026-CertificadoSecretKey-…">
+          <div class="help">Apaga ao fechar o separador. Para a guardar de novo, voltas a preencher e clicas em "Guardar configuração" (mas só altera a tua sessão local).</div>
+        </div>
+      </div>
+      <div class="alert warn" style="margin-top:12px">⚠️ Mudar esta chave invalida todos os certificados emitidos antes da mudança.</div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="btn-setup-save">Guardar configuração</button>
+      <button class="btn secondary" id="btn-setup-reload">Recarregar do servidor</button>
+    </div>
+  </section>
+
+  <!-- ════════════ INSCRITOS ════════════ -->
+  <section class="tab-panel" id="tab-inscritos">
+    <div class="panel">
+      <h2>Importar lista de inscritos</h2>
+      <p class="lead">Faz upload do ficheiro Excel. As colunas Nome / Email / Cargo / Entidade / Categoria são auto-detectadas. Os emails ficam <strong>apenas no teu browser</strong> (sessionStorage) — nunca são publicados no GitHub.</p>
+
+      <label for="filein" class="filedrop" id="filedrop">
+        <div class="big">📎 Carregar Excel (.xlsx)</div>
+        <div class="small">ou arrasta o ficheiro para aqui</div>
+        <input type="file" id="filein" accept=".xlsx,.xls,.xlsm,.csv">
+      </label>
+
+      <div id="inscritos-preview" class="hide" style="margin-top:16px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Lista pública</h2>
+      <p class="lead">Estado actual de <code>data/inscritos.json</code> no GitHub (versão sem emails, lida pela app de presenças).</p>
+      <div id="inscritos-publica"></div>
+      <div class="actions">
+        <button class="btn" id="btn-inscritos-publish">Publicar inscritos.json</button>
+        <button class="btn secondary" id="btn-inscritos-reload">Recarregar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ PRESENÇAS ════════════ -->
+  <section class="tab-panel" id="tab-presencas">
+    <div class="panel">
+      <h2>Estado das presenças</h2>
+      <p class="lead">Vista do <code>data/presencas.json</code>, escrito pela app de check-in à porta. Actualiza a cada 30 s.</p>
+
+      <div class="stats">
+        <div class="stat-card pres"><div class="n" id="pres-n-pres">0</div><div class="l">Presentes</div></div>
+        <div class="stat-card"><div class="n" id="pres-n-tot">0</div><div class="l">Inscritos</div></div>
+        <div class="stat-card aviso"><div class="n" id="pres-n-aus">0</div><div class="l">Por marcar</div></div>
+        <div class="stat-card"><div class="n" id="pres-pct">0%</div><div class="l">Taxa</div></div>
+      </div>
+
+      <div id="pres-tabela"></div>
+
+      <div class="actions">
+        <a class="btn secondary" id="link-tablet" target="_blank" rel="noopener">Abrir app no tablet ↗</a>
+        <button class="btn secondary" id="btn-presencas-reload">Recarregar agora</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ EMISSÃO ════════════ -->
+  <section class="tab-panel" id="tab-emissao">
+    <div class="panel">
+      <h2>Emitir certificados</h2>
+      <p class="lead">Para cada inscrito presente sem certificado, gera nº sequencial <code>AAAA/NNNN</code>, hash SHA-256 canónico e link único. Histórico em <code>data/certificados.json</code>.</p>
+
+      <div class="alert info" id="emissao-info">A carregar…</div>
+
+      <div id="emissao-tabela"></div>
+
+      <div class="actions">
+        <button class="btn" id="btn-emissao-gerar">Gerar certificados em falta</button>
+        <button class="btn secondary" id="btn-emissao-publish">Publicar certs.json (validar.html)</button>
+        <button class="btn secondary" id="btn-emissao-reload">Recarregar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ ENVIO ════════════ -->
+  <section class="tab-panel" id="tab-envio">
+    <div class="panel">
+      <h2>Envio de certificados por email</h2>
+      <p class="lead">Gera ficheiros <code>.eml</code> para cada certificado e empacota em zip. Depois arrasta os ficheiros para a pasta <strong>Drafts</strong> do Outlook desktop e selecciona "Enviar tudo".</p>
+
+      <div class="alert info">
+        <strong>Como funciona:</strong> 1) carrega o Excel na tab Inscritos para teres os emails em sessão; 2) clica "Gerar zip"; 3) extrai o zip; 4) selecciona todos os <code>.eml</code> e arrasta para Outlook → Drafts; 5) Selecciona todas as drafts e Send.
+      </div>
+
+      <div id="envio-tabela"></div>
+
+      <div class="actions">
+        <button class="btn success" id="btn-envio-bridge" title="Envia automaticamente via Gmail (configurar bridge na tab Setup)">⚡ Enviar via bridge</button>
+        <button class="btn" id="btn-envio-zip">Gerar zip de .eml</button>
+        <button class="btn secondary" id="btn-envio-mailto">Abrir mailto:</button>
+        <button class="btn secondary" id="btn-envio-marcar-enviados">Marcar como enviados (sem enviar)</button>
+        <button class="btn secondary" id="btn-envio-reload">Recarregar</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Modal: login -->
+<div class="modal" id="modal-login">
+  <div class="card">
+    <h2>Acesso ao admin</h2>
+    <p>PIN da equipa + token GitHub fine-grained com <code>contents:write</code> nos repos <code>Presencas</code> e <code>Certificados</code>. O token só persiste nesta sessão.</p>
+    <label>PIN</label>
+    <input type="password" id="in-pin" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off">
+    <div style="height:10px"></div>
+    <label>Token GitHub</label>
+    <input type="password" id="in-token" autocomplete="off" placeholder="github_pat_…">
+    <div class="alert erro hide" id="login-erro"></div>
+    <div class="actions">
+      <button class="btn" id="btn-login" style="flex:1">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: confirmação -->
+<div class="modal hide" id="modal-confirm">
+  <div class="card">
+    <h2 id="cf-titulo">Confirmar</h2>
+    <p id="cf-msg"></p>
+    <div class="actions">
+      <button class="btn secondary" id="cf-cancel" style="flex:1">Cancelar</button>
+      <button class="btn" id="cf-ok" style="flex:1">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="loading" class="hide"><div class="spinner"></div><div id="loading-text" style="font-size:14px;color:var(--texto-mute)">A carregar…</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,16 @@
+# Libs descarregadas pelo Download-Libs.ps1 — versionar é opcional (são
+# pinned, mas grandes). Por defeito incluímos para ter resiliência sem CDN.
+# Comenta a linha abaixo se preferires manter as libs fora do repo.
+# assets/lib/
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~

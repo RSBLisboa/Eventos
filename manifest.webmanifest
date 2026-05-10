@@ -1,0 +1,16 @@
+{
+  "name": "Eventos · Admin RSB Lisboa",
+  "short_name": "Eventos RSB",
+  "description": "Gestão de eventos, inscritos, certificados e envios — Regimento de Sapadores Bombeiros de Lisboa.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f4f5",
+  "theme_color": "#E30613",
+  "lang": "pt-PT",
+  "icons": [
+    { "src": "assets/rsb-brasao.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/rsb-brasao.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
