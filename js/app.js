@@ -59,6 +59,7 @@
     eventoSha: null,
     inscritos: [],          // sem email (público)
     inscritosSha: null,
+    inscritosUltimoPublicado: [],  // snapshot do publicado (para detectar alterações)
     inscritosAdmin: {},     // map id → email (privado, sessionStorage)
     presencas: null,        // raw payload
     presencasSha: null,
@@ -305,6 +306,7 @@
 
       ST.inscritosSha = ins.sha;
       ST.inscritos = (ins.payload && ins.payload.inscritos) || [];
+      ST.inscritosUltimoPublicado = JSON.parse(JSON.stringify(ST.inscritos));
 
       ST.presencasSha = pres.sha;
       ST.presencas = pres.payload;
@@ -540,6 +542,7 @@
         const idxCategoria  = detectarColuna(headers, ['categoria']);
         const idxEstado     = detectarColuna(headers, ['estado_inscri', 'estado de ins', 'estado inscri']);
         const idxNaoEnviar  = detectarColuna(headers, ['nao enviar', 'não enviar', 'naoenviar']);
+        const idxEraConv    = detectarColuna(headers, ['era_convidado', 'era convidado', 'eraconvidado', 'convidado']);
 
         if (idxNome < 0) {
           toast('Coluna "Nome" não encontrada no Excel.', 'err');
@@ -577,11 +580,18 @@
           const estado = mapearEstado(estadoRaw);
           // Flag "Não enviar Mail"
           const naoEnviar = idxNaoEnviar >= 0 ? toBool(r[idxNaoEnviar]) : false;
+          // Era convidado? (Sim/Não). Default "Sim" se não tem coluna (assume todos eram convidados).
+          let eraConvidado = 'Sim';
+          if (idxEraConv >= 0) {
+            const v = String(r[idxEraConv] || '').trim().toLowerCase();
+            if (v === 'não' || v === 'nao' || v === 'no' || v === 'false' || v === '0') eraConvidado = 'Não';
+            else if (v === 'sim' || v === 'yes' || v === 'true' || v === '1' || v === 'x') eraConvidado = 'Sim';
+          }
 
           if (!email) semEmailCount++;
           if (naoEnviar) naoEnviarCount++;
 
-          inscritos.push({ id: inscritoId, nome, cargo, entidade, categoria, estado, naoEnviar });
+          inscritos.push({ id: inscritoId, nome, cargo, entidade, categoria, estado, naoEnviar, eraConvidado });
           if (email && !naoEnviar) emails[inscritoId] = email;
         }
 
@@ -599,6 +609,7 @@
         renderEmissao();
         renderEnvio();
         atualizarBadges();
+        marcarAlteradoSeDiferente();
         const detalhes = [];
         if (multiEmail) detalhes.push(`${multiEmail} com múltiplos emails (juntados com vírgula)`);
         if (semEmailCount) detalhes.push(`${semEmailCount} sem email`);
@@ -646,23 +657,41 @@
           ? `<td class="truncate"><span class="small mono">${escapeHtml(em)}</span></td>`
           : `<td><span class="small" style="color:var(--erro)">— sem email —</span></td>`;
       }
-      return `<tr class="hover">
-        <td>${escapeHtml(i.nome)}</td>
+      const eraConv = i.eraConvidado;
+      const pillEra = eraConv === 'Não' || eraConv === 'Nao'
+        ? '<span class="pill amarelo" title="Auto-inscrito · não estava na lista original">Auto</span>'
+        : (eraConv === 'Sim' ? '<span class="pill cinza" title="Estava na lista de convidados original">Conv.</span>' : '');
+      const flagNaoEnviar = i.naoEnviar ? '<span class="pill amarelo" title="Flag: Não enviar mail">🚫</span>' : '';
+      return `<tr class="hover" data-row-id="${i.id}">
+        <td><span class="small mono" style="color:var(--texto-mute)">${escapeHtml(String(i.id || ''))}</span></td>
+        <td>${escapeHtml(i.nome)} ${flagNaoEnviar}</td>
         <td><span class="small">${escapeHtml(i.cargo || '—')}</span></td>
         <td><span class="small">${escapeHtml(i.entidade || '—')}</span></td>
         ${colEmail}
-        <td>${pillEstado(i.estado)}</td>
+        <td><span class="estado-pill-click" data-id="${i.id}" style="cursor:pointer" title="Click para ciclar estado">${pillEstado(i.estado)}</span></td>
+        <td>${pillEra}</td>
+        <td><button class="acao-edit" data-id="${i.id}" style="background:transparent;border:1px solid var(--linha);border-radius:4px;padding:3px 8px;cursor:pointer;font-size:13px" title="Editar">✏️</button></td>
       </tr>`;
     }).join('');
-    return `<div style="max-height:420px;overflow:auto;border:1px solid var(--linha);border-radius:6px">
+    return `<div style="max-height:480px;overflow:auto;border:1px solid var(--linha);border-radius:6px">
       <table>
         <thead><tr>
+          <th style="width:50px">ID</th>
           <th>Nome</th><th>Cargo</th><th>Entidade</th>
           ${comEmail ? '<th>Email (sessão)</th>' : ''}
-          <th>Estado</th>
+          <th style="width:120px">Estado</th>
+          <th style="width:70px">Origem</th>
+          <th style="width:48px"></th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table></div>`;
+  }
+
+  // Ciclo de estados (clique na pill)
+  const CICLO_ESTADOS = ['Pendente', 'Confirmada', 'Lista de espera', 'Cancelada', 'Recusada'];
+  function proximoEstado(estado) {
+    const i = CICLO_ESTADOS.indexOf(estado);
+    return CICLO_ESTADOS[(i + 1) % CICLO_ESTADOS.length];
   }
   function pillEstado(s) {
     const v = (s || '').toLowerCase();
@@ -670,6 +699,141 @@
     if (v.indexOf('espera') >= 0) return '<span class="pill amarelo">Espera</span>';
     if (v.indexOf('cancel') >= 0 || v.indexOf('recusa') >= 0) return '<span class="pill vermelho">' + escapeHtml(s) + '</span>';
     return '<span class="pill cinza">' + escapeHtml(s || 'Pendente') + '</span>';
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EDIÇÃO DE INSCRITOS (modal + ciclo de estado + add new)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ST.inscritosUltimoPublicado: snapshot do que está em data/inscritos.json
+  // (usado para detectar alterações não publicadas).
+  function marcarAlteradoSeDiferente() {
+    const igual = JSON.stringify(ST.inscritos) === JSON.stringify(ST.inscritosUltimoPublicado || []);
+    const el = $('inscritos-unsaved');
+    if (el) el.classList.toggle('hide', igual);
+  }
+
+  function abrirEditModal(id) {
+    const i = ST.inscritos.find(x => x.id == id);  // == para coerção (string vs int)
+    if (!i) { toast('Inscrito não encontrado.', 'err'); return; }
+    $('edit-titulo').textContent = 'Editar inscrito';
+    $('edit-novo').value = '0';
+    $('edit-id').value = i.id;
+    $('edit-nome').value = i.nome || '';
+    $('edit-email').value = ST.inscritosAdmin[i.id] || '';
+    $('edit-cargo').value = i.cargo || '';
+    $('edit-entidade').value = i.entidade || '';
+    $('edit-categoria').value = i.categoria || '';
+    $('edit-estado').value = i.estado || 'Pendente';
+    $('edit-era-conv').value = (i.eraConvidado === 'Não' || i.eraConvidado === 'Nao') ? 'Não' : 'Sim';
+    $('edit-nao-enviar').checked = !!i.naoEnviar;
+    $('edit-delete').style.display = '';
+    $('modal-edit-inscrito').classList.remove('hide');
+    setTimeout(() => $('edit-nome').focus(), 60);
+  }
+
+  function abrirAddModal() {
+    // Próximo ID livre
+    let maxId = 0;
+    for (const i of ST.inscritos) {
+      const n = parseInt(i.id, 10);
+      if (!isNaN(n) && n > maxId) maxId = n;
+    }
+    $('edit-titulo').textContent = 'Adicionar inscrito';
+    $('edit-novo').value = '1';
+    $('edit-id').value = maxId + 1;
+    $('edit-nome').value = '';
+    $('edit-email').value = '';
+    $('edit-cargo').value = '';
+    $('edit-entidade').value = '';
+    $('edit-categoria').value = '';
+    $('edit-estado').value = 'Confirmada';
+    $('edit-era-conv').value = 'Não';  // auto-inscritos são default em adicionar manual
+    $('edit-nao-enviar').checked = false;
+    $('edit-delete').style.display = 'none';
+    $('modal-edit-inscrito').classList.remove('hide');
+    setTimeout(() => $('edit-nome').focus(), 60);
+  }
+
+  function fecharEditModal() {
+    $('modal-edit-inscrito').classList.add('hide');
+  }
+
+  function salvarEdit() {
+    const novo = $('edit-novo').value === '1';
+    const id = parseInt($('edit-id').value, 10);
+    const nome = $('edit-nome').value.trim();
+    if (!nome) { toast('Nome é obrigatório.', 'err'); $('edit-nome').focus(); return; }
+
+    const dados = {
+      id: id,
+      nome: nome,
+      cargo: $('edit-cargo').value.trim(),
+      entidade: $('edit-entidade').value.trim(),
+      categoria: $('edit-categoria').value.trim(),
+      estado: $('edit-estado').value,
+      eraConvidado: $('edit-era-conv').value,
+      naoEnviar: $('edit-nao-enviar').checked
+    };
+
+    if (novo) {
+      // Verificar duplicado de ID
+      if (ST.inscritos.some(x => x.id == id)) {
+        toast('Já existe um inscrito com este ID.', 'err');
+        return;
+      }
+      ST.inscritos.push(dados);
+    } else {
+      const idx = ST.inscritos.findIndex(x => x.id == id);
+      if (idx < 0) { toast('Inscrito não encontrado.', 'err'); return; }
+      ST.inscritos[idx] = dados;
+    }
+
+    // Email vai para sessionStorage (privado)
+    const email = $('edit-email').value.trim();
+    if (email && !dados.naoEnviar) {
+      ST.inscritosAdmin[id] = email;
+    } else {
+      delete ST.inscritosAdmin[id];
+    }
+    ssGravarEmails();
+
+    // Reordenar alfabeticamente
+    ST.inscritos.sort((a, b) => normalizar(a.nome).localeCompare(normalizar(b.nome)));
+
+    fecharEditModal();
+    renderInscritos();
+    renderEmissao();
+    renderEnvio();
+    atualizarBadges();
+    marcarAlteradoSeDiferente();
+    toast(novo ? 'Inscrito adicionado (não publicado).' : 'Inscrito actualizado (não publicado).', 'ok');
+  }
+
+  async function apagarInscrito() {
+    const id = parseInt($('edit-id').value, 10);
+    const i = ST.inscritos.find(x => x.id == id);
+    if (!i) return;
+    const ok = await confirmar('Apagar inscrito',
+      `Apagar "${i.nome}"? A operação só é permanente após "Publicar inscritos.json".`);
+    if (!ok) return;
+    ST.inscritos = ST.inscritos.filter(x => x.id != id);
+    delete ST.inscritosAdmin[id];
+    ssGravarEmails();
+    fecharEditModal();
+    renderInscritos();
+    renderEmissao();
+    renderEnvio();
+    atualizarBadges();
+    marcarAlteradoSeDiferente();
+    toast('Inscrito removido (não publicado).', 'ok');
+  }
+
+  function ciclarEstado(id) {
+    const i = ST.inscritos.find(x => x.id == id);
+    if (!i) return;
+    i.estado = proximoEstado(i.estado || 'Pendente');
+    renderInscritos();
+    marcarAlteradoSeDiferente();
   }
 
   async function inscritosPublicar() {
@@ -709,6 +873,9 @@
         () => ST.inscritosSha,
         `inscritos: ${ST.inscritos.length} · ${nowIso()}`
       );
+      // Snapshot do que ficou publicado (referência para "alterações por publicar")
+      ST.inscritosUltimoPublicado = JSON.parse(JSON.stringify(ST.inscritos));
+      marcarAlteradoSeDiferente();
       toast('Lista publicada.', 'ok');
       setLoading(false);
       atualizarBadges();
@@ -1507,11 +1674,45 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
         const { sha, payload } = await ghLer('data/inscritos.json');
         ST.inscritosSha = sha;
         ST.inscritos = (payload && payload.inscritos) || [];
+        ST.inscritosUltimoPublicado = JSON.parse(JSON.stringify(ST.inscritos));
         renderInscritos(); renderPresencas(); renderEmissao(); renderEnvio();
         atualizarBadges();
+        marcarAlteradoSeDiferente();
         toast('Recarregado.', 'ok');
       } catch (e) { toast('Erro: ' + e.message, 'err'); }
       setLoading(false);
+    });
+
+    // ── Inscritos: add + edit + ciclo de estado (delegação) ──
+    $('btn-inscritos-add').addEventListener('click', abrirAddModal);
+    $('inscritos-preview').addEventListener('click', e => {
+      const btnEdit = e.target.closest('.acao-edit');
+      const pillEstadoEl = e.target.closest('.estado-pill-click');
+      if (btnEdit) {
+        abrirEditModal(btnEdit.dataset.id);
+        return;
+      }
+      if (pillEstadoEl) {
+        e.stopPropagation();
+        ciclarEstado(pillEstadoEl.dataset.id);
+        return;
+      }
+      // Click em qualquer outra zona da linha → editar
+      const row = e.target.closest('tr.hover');
+      if (row && row.dataset.rowId) abrirEditModal(row.dataset.rowId);
+    });
+
+    // Modal handlers
+    $('edit-save').addEventListener('click', salvarEdit);
+    $('edit-cancel').addEventListener('click', fecharEditModal);
+    $('edit-delete').addEventListener('click', apagarInscrito);
+    $('modal-edit-inscrito').addEventListener('click', e => {
+      if (e.target.id === 'modal-edit-inscrito') fecharEditModal();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !$('modal-edit-inscrito').classList.contains('hide')) {
+        fecharEditModal();
+      }
     });
 
     $('btn-presencas-reload').addEventListener('click', presencasRecarregar);

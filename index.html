@@ -577,6 +577,11 @@
         <input type="file" id="filein" accept=".xlsx,.xls,.xlsm,.csv">
       </label>
 
+      <div class="actions" style="margin-top:14px">
+        <button class="btn secondary" id="btn-inscritos-add">+ Adicionar inscrito</button>
+        <span class="small" style="margin-left:8px;color:var(--texto-mute)">Clica numa linha para editar · clica no pill de estado para ciclar</span>
+      </div>
+
       <div id="inscritos-preview" class="hide" style="margin-top:16px"></div>
     </div>
 
@@ -584,12 +589,82 @@
       <h2>Lista pública</h2>
       <p class="lead">Estado actual de <code>data/inscritos.json</code> no GitHub (versão sem emails, lida pela app de presenças).</p>
       <div id="inscritos-publica"></div>
+      <div id="inscritos-unsaved" class="alert warn hide" style="margin-top:10px">
+        ⚠️ Existem alterações não publicadas. Clica "Publicar inscritos.json" para enviar para o GitHub.
+      </div>
       <div class="actions">
         <button class="btn" id="btn-inscritos-publish">Publicar inscritos.json</button>
         <button class="btn secondary" id="btn-inscritos-reload">Recarregar</button>
       </div>
     </div>
   </section>
+
+  <!-- ════════════ MODAL: Editar inscrito ════════════ -->
+  <div class="modal hide" id="modal-edit-inscrito">
+    <div class="card" style="max-width:600px">
+      <h2 id="edit-titulo">Editar inscrito</h2>
+      <input type="hidden" id="edit-id">
+      <input type="hidden" id="edit-novo">
+      <div class="form-grid">
+        <div class="full">
+          <label>Nome *</label>
+          <input id="edit-nome" placeholder="Nome completo">
+        </div>
+        <div class="full">
+          <label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--texto-mute)">(sessão local — não publicado)</span></label>
+          <input id="edit-email" type="email" placeholder="exemplo@dominio.pt · use «; » para múltiplos">
+        </div>
+        <div>
+          <label>Cargo</label>
+          <input id="edit-cargo">
+        </div>
+        <div>
+          <label>Entidade</label>
+          <input id="edit-entidade">
+        </div>
+        <div>
+          <label>Categoria</label>
+          <input id="edit-categoria" list="categoria-options">
+          <datalist id="categoria-options">
+            <option value="Entidade Pública">
+            <option value="Bombeiros Profissionais">
+            <option value="Bombeiros Voluntários">
+            <option value="Forças Armadas">
+            <option value="Empresa/Indústria">
+            <option value="Universidade/Investigação">
+            <option value="Outro">
+          </datalist>
+        </div>
+        <div>
+          <label>Estado da inscrição</label>
+          <select id="edit-estado">
+            <option>Pendente</option>
+            <option>Confirmada</option>
+            <option>Lista de espera</option>
+            <option>Cancelada</option>
+            <option>Recusada</option>
+          </select>
+        </div>
+        <div>
+          <label>Era convidado?</label>
+          <select id="edit-era-conv">
+            <option value="Sim">Sim · estava na lista original</option>
+            <option value="Não">Não · auto-inscrito</option>
+          </select>
+        </div>
+        <div class="full">
+          <label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500">
+            <input type="checkbox" id="edit-nao-enviar" style="width:auto"> Não enviar mail (flag de exclusão de envio)
+          </label>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:20px">
+        <button class="btn secondary" id="edit-cancel">Cancelar</button>
+        <button class="btn danger" id="edit-delete" style="margin-left:auto">🗑 Apagar</button>
+        <button class="btn primary" id="edit-save">Guardar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ════════════ PRESENÇAS ════════════ -->
   <section class="tab-panel" id="tab-presencas">
