@@ -42,13 +42,17 @@
 
   const TEMPLATE_EMAIL_DEFAULT = `<!DOCTYPE html><html><body style="font-family:Segoe UI,Calibri,sans-serif;color:#1a1a1a;line-height:1.6;max-width:600px;margin:auto;padding:24px">
 <p style="background:#E30613;color:#fff;padding:12px 16px;margin:0 0 24px;font-weight:bold;letter-spacing:.04em;text-transform:uppercase">Regimento de Sapadores Bombeiros de Lisboa</p>
-<p>Caro(a) <strong>{{Nome}}</strong>,</p>
-<p>Em anexo encontra-se o seu certificado de participação na <strong>{{Titulo}}</strong>, realizada em <strong>{{DataEvento}}</strong> no <strong>{{Local}}</strong>.</p>
-<p>Pode aceder ao certificado no link único abaixo:</p>
-<p style="text-align:center;margin:24px 0"><a href="{{Link}}" style="background:#E30613;color:#fff;padding:12px 24px;text-decoration:none;border-radius:4px;font-weight:bold">Abrir certificado</a></p>
-<p style="font-size:13px;color:#888">Número: {{NumeroCertificado}}</p>
+<p>Exmo./a. Senhor/a <strong>{{Nome}}</strong>,</p>
+<p>Em nome do Regimento de Sapadores Bombeiros de Lisboa, agradecemos a sua presença na <strong>{{Titulo}}</strong>, realizada a <strong>{{DataEvento}}</strong> no <strong>{{Local}}</strong>.</p>
+<p>A sua participação contribuiu para o reforço da articulação e partilha técnica entre as entidades que diariamente respondem a este tipo de incidentes, e foi para nós uma honra acolhê-lo nesta sessão.</p>
+<p>Em baixo encontra o link único para o seu certificado de participação, com o número <strong>{{NumeroCertificado}}</strong>.</p>
+<p style="text-align:center;margin:24px 0"><a href="{{Link}}" style="background:#E30613;color:#fff;padding:12px 24px;text-decoration:none;border-radius:4px;font-weight:bold">Abrir o meu certificado</a></p>
 <hr style="border:none;border-top:1px solid #ddd;margin:24px 0">
-<p style="font-size:12px;color:#888">Cumprimentos,<br>Secretariado · Regimento de Sapadores Bombeiros de Lisboa</p>
+<p style="margin:0 0 4px">Com os melhores cumprimentos,</p>
+{{AssinaturaImagem}}
+<p style="margin:4px 0 0;font-weight:600;color:#1a1a1a">{{Signatario}}</p>
+<p style="margin:2px 0 0;font-size:12px;color:#666">{{SignatarioCargo}}</p>
+<p style="margin:18px 0 0;font-size:11px;color:#888">Regimento de Sapadores Bombeiros de Lisboa · Câmara Municipal de Lisboa · rsb.esbl@cm-lisboa.pt</p>
 </body></html>`;
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -63,7 +67,7 @@
     inscritosAdmin: {},     // map id → email (privado, sessionStorage)
     presencas: null,        // raw payload
     presencasSha: null,
-    certificados: [],       // [{numero, idInscricao, hash, dataEmissao, dataEnvioEmail, anulado, link}]
+    certificados: [],       // [{numero, idInscricao, hash, link, tokenApreciacao, linkApreciacao, dataEmissao, dataEnvioEmail, anulado}]
     certificadosSha: null,
     pollTimer: null,
     activeTab: 'setup',
@@ -353,6 +357,8 @@
       descricao: 'dedicada ao reforço de conhecimentos técnicos e à sensibilização para os riscos associados à intervenção operacional em cenários envolvendo substâncias perigosas.',
       signatario: 'TCor Eng. Alexandre Rodrigues',
       signatarioCargo: 'Comandante do RSBL',
+      assinaturaComandantePng: '',   // data URL base64 PNG, carregada via Setup
+      assinaturaCarregadaEm: '',     // ISO timestamp
       emailFrom: '',
       emailCc: '',
       emailSubject: 'Certificado de Participação · Sessão Técnica em Substâncias Perigosas',
@@ -410,6 +416,7 @@
     $('evt-descricao').value = e.descricao || '';
     $('evt-sig-nome').value = e.signatario || '';
     $('evt-sig-cargo').value = e.signatarioCargo || '';
+    renderAssinaturaPreview(e.assinaturaComandantePng);
     $('evt-email-from').value = e.emailFrom || '';
     $('evt-email-cc').value = e.emailCc || '';
     $('evt-email-subject').value = e.emailSubject || '';
@@ -849,6 +856,21 @@
       `Vai escrever ${ST.inscritos.length} inscritos em data/inscritos.json (sem emails). Continuar?`);
     if (!ok) return;
 
+    // Embeber tokenApreciacao por inscrito (SHA-256(id|SECRET).substring(0,16)),
+    // para que a PWA Presencas possa gerar o QR de apreciacao sem conhecer a SECRET.
+    // Se a SECRET nao estiver em sessao, o token fica vazio e a PWA mostra aviso.
+    const secret = getSecret();
+    const inscritosComToken = [];
+    for (const i of ST.inscritos) {
+      const tokenApreciacao = secret
+        ? (await sha256Hex(i.id + '|' + secret)).substring(0, 16).toLowerCase()
+        : '';
+      inscritosComToken.push(Object.assign({}, i, { tokenApreciacao }));
+    }
+    if (!secret) {
+      toast('AVISO: SECRET ausente. Tokens de apreciacao ficaram vazios. Preenche SECRET no Setup e republica.', 'err');
+    }
+
     const payload = {
       schema: 'inscritos@1',
       evento: {
@@ -861,8 +883,8 @@
         cargaHoraria: ST.evento.cargaHoraria
       },
       exportadoEm: nowIso(),
-      total: ST.inscritos.length,
-      inscritos: ST.inscritos
+      total: inscritosComToken.length,
+      inscritos: inscritosComToken
     };
 
     setLoading(true, 'A publicar inscritos.json…');
@@ -973,7 +995,31 @@
     if (e.titulo) link += '&t=' + enc(e.titulo);
     if (e.local) link += '&l=' + enc(e.local);
     link += '&v=' + hash;
-    return { link, hash };
+
+    // Link único para apreciacao.html. Token = SHA-256(idInscricao|SECRET).substring(0,16).
+    // Validado em apreciacao.html (client) e no bridge Apps Script (server, antes de persistir).
+    const tokenApreciacao = (await sha256Hex(inscrito.id + '|' + secret)).substring(0, 16).toLowerCase();
+    const linkApreciacao = CONFIG.baseUrlCerts + 'apreciacao.html?id=' + enc(inscrito.id) + '&t=' + tokenApreciacao;
+
+    return { link, hash, tokenApreciacao, linkApreciacao };
+  }
+
+  // Devolve a tag HTML <img> da assinatura do Comandante, ou string vazia se
+  // a assinatura nao estiver carregada. Usada no template do email.
+  function assinaturaImagemTag() {
+    const e = ST.evento || {};
+    if (!e.assinaturaComandantePng) return '';
+    return '<img src="' + e.assinaturaComandantePng + '" alt="Assinatura" style="display:block;max-height:80px;max-width:240px;margin:6px 0 2px">';
+  }
+
+  // Devolve link de apreciação para um cert existente. Recalcula se for certificado
+  // antigo (emitido antes desta versão) que ainda não tem linkApreciacao gravado.
+  async function obterLinkApreciacao(cert) {
+    if (cert.linkApreciacao) return cert.linkApreciacao;
+    const secret = getSecret();
+    if (!secret) return '';
+    const t = (await sha256Hex(cert.idInscricao + '|' + secret)).substring(0, 16).toLowerCase();
+    return CONFIG.baseUrlCerts + 'apreciacao.html?id=' + encodeURIComponent(cert.idInscricao) + '&t=' + t;
   }
   function renderEmissao() {
     const presMap = getPresencasMap();
@@ -1050,10 +1096,11 @@
 
       for (const inscrito of aEmitir) {
         const numero = ano + '/' + String(prox).padStart(4, '0');
-        const { link, hash } = await gerarLinkCert(inscrito, numero, dataEvento, dataEmissao);
+        const { link, hash, tokenApreciacao, linkApreciacao } = await gerarLinkCert(inscrito, numero, dataEvento, dataEmissao);
         ST.certificados.push({
           numero, idInscricao: inscrito.id,
           hash, link,
+          tokenApreciacao, linkApreciacao,
           dataEmissao: nowIso(),
           dataEnvioEmail: null,
           anulado: false
@@ -1154,6 +1201,20 @@
     const inscritosMap = new Map();
     for (const i of ST.inscritos) inscritosMap.set(i.id, i);
 
+    // Banner do gate de assinatura
+    const gateEl = $('envio-gate-assinatura');
+    if (gateEl) {
+      const e = ST.evento || {};
+      if (e.assinaturaComandantePng) {
+        const nomeCmt = (e.signatario || 'Comandante').trim();
+        gateEl.className = 'alert ok';
+        gateEl.innerHTML = '<strong>✓ Autorização activa</strong> · Assinatura de <strong>' + escapeHtml(nomeCmt) + '</strong> carregada. Envio liberado.';
+      } else {
+        gateEl.className = 'alert erro';
+        gateEl.innerHTML = '<strong>⚠ Envio bloqueado</strong> · Assinatura do Comandante em falta. Vai à tab Setup, secção "Assinatura do certificado", e carrega o PNG antes de enviar.';
+      }
+    }
+
     const linhas = ST.certificados.map(c => {
       const i = inscritosMap.get(c.idInscricao) || { nome: '?', cargo: '', entidade: '', naoEnviar: false };
       const email = ST.inscritosAdmin[c.idInscricao] || '';
@@ -1204,9 +1265,10 @@
     return ST.certificados.filter(c => ids.has(c.idInscricao));
   }
 
-  function buildEmlContent(cert, inscrito, email) {
+  async function buildEmlContent(cert, inscrito, email) {
     const e = ST.evento;
     const dataEvento = dataPorExtenso(e.data);
+    const linkApreciacao = await obterLinkApreciacao(cert);
     const vars = {
       Nome: inscrito.nome,
       Email: email,
@@ -1219,7 +1281,11 @@
       Local: e.local || '',
       CargaHoraria: e.cargaHoraria || '',
       NumeroCertificado: cert.numero,
-      Link: cert.link
+      Link: cert.link,
+      LinkApreciacao: linkApreciacao,
+      Signatario: e.signatario || 'TCor Eng. Alexandre Rodrigues',
+      SignatarioCargo: e.signatarioCargo || 'Comandante do RSBL',
+      AssinaturaImagem: assinaturaImagemTag()
     };
     const subject = aplicarPlaceholders(e.emailSubject || 'Certificado · {{Nome}}', vars);
     const html = aplicarPlaceholders(e.emailBody || TEMPLATE_EMAIL_DEFAULT, vars);
@@ -1287,6 +1353,10 @@
       if (!ok) return;
     }
 
+    const nEnviar = seleccionados.length - semEmail.length;
+    const okGate = await gateAssinatura(nEnviar);
+    if (!okGate) return;
+
     setLoading(true, 'A construir emails…');
     try {
       const zip = new JSZip();
@@ -1296,7 +1366,7 @@
         if (!email) continue;
         const inscrito = inscritosMap.get(cert.idInscricao);
         if (!inscrito) continue;
-        const eml = buildEmlContent(cert, inscrito, email);
+        const eml = await buildEmlContent(cert, inscrito, email);
         const fname = `${String(n+1).padStart(3,'0')}_${fileSafe(inscrito.nome)}_${fileSafe(cert.numero)}.eml`;
         zip.file(fname, eml);
         n++;
@@ -1339,6 +1409,10 @@ Total: ${n} emails
         `Vai abrir ${seleccionados.length} janelas de email. Tens a certeza? (Para mais que ~5 emails, usa o zip de .eml.)`);
       if (!ok) return;
     }
+
+    const okGate = await gateAssinatura(seleccionados.length);
+    if (!okGate) return;
+
     const inscritosMap = new Map();
     for (const i of ST.inscritos) inscritosMap.set(i.id, i);
 
@@ -1348,14 +1422,20 @@ Total: ${n} emails
       const inscrito = inscritosMap.get(cert.idInscricao);
       if (!inscrito) continue;
       const e = ST.evento;
+      const linkApreciacao = await obterLinkApreciacao(cert);
+      const sig = e.signatario || 'TCor Eng. Alexandre Rodrigues';
+      const sigCargo = e.signatarioCargo || 'Comandante do RSBL';
       const vars = {
         Nome: inscrito.nome, Titulo: e.titulo, Link: cert.link,
         NumeroCertificado: cert.numero, DataEvento: dataPorExtenso(e.data),
         Local: e.local, Cargo: inscrito.cargo, Entidade: inscrito.entidade,
-        CargaHoraria: e.cargaHoraria, HoraInicio: e.horaInicio, HoraFim: e.horaFim
+        CargaHoraria: e.cargaHoraria, HoraInicio: e.horaInicio, HoraFim: e.horaFim,
+        LinkApreciacao: linkApreciacao,
+        Signatario: sig, SignatarioCargo: sigCargo,
+        AssinaturaImagem: assinaturaImagemTag()
       };
       const subject = aplicarPlaceholders(e.emailSubject, vars);
-      const body = `Caro(a) ${inscrito.nome},\n\nO certificado de participação na ${e.titulo} está disponível em:\n\n${cert.link}\n\nNº: ${cert.numero}\n\nCumprimentos,\nSecretariado RSB Lisboa`;
+      const body = `Exmo./a. Senhor/a ${inscrito.nome},\n\nEm nome do Regimento de Sapadores Bombeiros de Lisboa, agradecemos a sua presença na ${e.titulo}, realizada a ${dataPorExtenso(e.data)} no ${e.local}.\n\nO seu certificado de participação (nº ${cert.numero}) está disponível em:\n${cert.link}\n\nCom os melhores cumprimentos,\n${sig}\n${sigCargo}\nRegimento de Sapadores Bombeiros de Lisboa`;
       const url = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       window.open(url, '_blank');
       // pequena pausa para evitar pop-up blocker
@@ -1458,13 +1538,18 @@ Total: ${n} emails
       const inscrito = inscritosMap.get(cert.idInscricao);
       if (!inscrito) continue;
       const e = ST.evento;
+      const linkApreciacao = await obterLinkApreciacao(cert);
       const vars = {
         Nome: inscrito.nome, Email: email,
         Cargo: inscrito.cargo || '', Entidade: inscrito.entidade || '',
         Titulo: e.titulo || '', DataEvento: dataPorExtenso(e.data),
         HoraInicio: e.horaInicio || '', HoraFim: e.horaFim || '',
         Local: e.local || '', CargaHoraria: e.cargaHoraria || '',
-        NumeroCertificado: cert.numero, Link: cert.link
+        NumeroCertificado: cert.numero, Link: cert.link,
+        LinkApreciacao: linkApreciacao,
+        Signatario: e.signatario || 'TCor Eng. Alexandre Rodrigues',
+        SignatarioCargo: e.signatarioCargo || 'Comandante do RSBL',
+        AssinaturaImagem: assinaturaImagemTag()
       };
       emails.push({
         idInscricao: cert.idInscricao,
@@ -1483,11 +1568,10 @@ Total: ${n} emails
       const ok = await confirmar('Emails em falta',
         `${semEmail} dos seleccionados não têm email em sessão (vão ser ignorados). Continuar com ${emails.length} emails?`);
       if (!ok) return;
-    } else {
-      const ok = await confirmar('Enviar via bridge',
-        `Vai enviar ${emails.length} emails reais via Gmail (bridge Apps Script). Continuar?`);
-      if (!ok) return;
     }
+
+    const okGate = await gateAssinatura(emails.length);
+    if (!okGate) return;
 
     setLoading(true, `A enviar ${emails.length} email(s) via bridge…`);
     try {
@@ -1729,6 +1813,85 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
 
     $('btn-bridge-test').addEventListener('click', bridgeTestar);
     $('btn-snapshot').addEventListener('click', snapshot);
+
+    // Upload da assinatura do Comandante
+    $('btn-sig-upload').addEventListener('click', () => $('evt-sig-imagem-file').click());
+    $('evt-sig-imagem-file').addEventListener('change', onAssinaturaUpload);
+    $('btn-sig-remover').addEventListener('click', onAssinaturaRemover);
+  }
+
+  function renderAssinaturaPreview(dataUrl) {
+    const img = $('evt-sig-imagem-img');
+    const vazio = $('evt-sig-imagem-vazio');
+    const btnRem = $('btn-sig-remover');
+    const btnUp = $('btn-sig-upload');
+    if (dataUrl) {
+      img.src = dataUrl;
+      img.style.display = 'block';
+      vazio.style.display = 'none';
+      btnRem.style.display = 'inline-block';
+      btnUp.textContent = 'Substituir PNG';
+    } else {
+      img.removeAttribute('src');
+      img.style.display = 'none';
+      vazio.style.display = 'block';
+      btnRem.style.display = 'none';
+      btnUp.textContent = 'Carregar PNG';
+    }
+  }
+
+  function onAssinaturaUpload(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > 500 * 1024) {
+      toast('PNG maior que 500 KB — reduzir antes de carregar.', 'err');
+      e.target.value = '';
+      return;
+    }
+    if (!/^image\/(png|jpeg)$/.test(file.type)) {
+      toast('Apenas PNG ou JPEG são suportados.', 'err');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (!ST.evento) ST.evento = eventoDefault();
+      ST.evento.assinaturaComandantePng = reader.result;
+      ST.evento.assinaturaCarregadaEm = nowIso();
+      renderAssinaturaPreview(reader.result);
+      toast('Assinatura carregada. Clica "Guardar configuração" para persistir.', 'ok');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  async function onAssinaturaRemover() {
+    const ok = await confirmar('Remover assinatura',
+      'Vais ficar sem autorização para enviar certificados até carregar nova assinatura. Continuar?');
+    if (!ok) return;
+    if (ST.evento) {
+      ST.evento.assinaturaComandantePng = '';
+      ST.evento.assinaturaCarregadaEm = '';
+    }
+    renderAssinaturaPreview('');
+    toast('Assinatura removida. Clica "Guardar configuração" para persistir.', 'ok');
+  }
+
+  // Gate de envio: bloqueia se nao houver assinatura carregada no evento.json
+  // Devolve true se OK para prosseguir, false se bloqueado.
+  async function gateAssinatura(nDestinatarios) {
+    const e = ST.evento;
+    if (!e || !e.assinaturaComandantePng) {
+      toast('Assinatura do Comandante em falta. Carregar no Setup antes de enviar.', 'err');
+      // Navegar para tab Setup automaticamente
+      const tabSetup = document.querySelector('[data-tab="setup"]');
+      if (tabSetup) tabSetup.click();
+      return false;
+    }
+    const nomeCmt = (e.signatario || 'TCor Eng. Alexandre Rodrigues').trim();
+    const ok = await confirmar('Confirmação de envio',
+      `Enviar ${nDestinatarios} certificado(s) em nome de ${nomeCmt}? Esta acção dispara emails reais.`);
+    return !!ok;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

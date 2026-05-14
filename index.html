@@ -490,6 +490,19 @@
           <label>Cargo</label>
           <input type="text" id="evt-sig-cargo" placeholder="Comandante do RSBL">
         </div>
+        <div class="full">
+          <label>Imagem da assinatura (PNG)</label>
+          <input type="file" id="evt-sig-imagem-file" accept="image/png,image/jpeg" style="display:none">
+          <div id="evt-sig-imagem-preview" style="display:flex;align-items:center;gap:14px;padding:12px;border:1px dashed var(--linha);border-radius:6px;min-height:80px">
+            <div id="evt-sig-imagem-vazio" style="color:var(--texto-mute);font-size:13px;flex:1">Sem imagem carregada. O envio de certificados fica bloqueado até carregar a assinatura.</div>
+            <img id="evt-sig-imagem-img" alt="" style="display:none;max-height:80px;max-width:200px;background:#fff;border:1px solid var(--linha);padding:4px;border-radius:4px">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button type="button" id="btn-sig-upload" class="btn" style="padding:6px 14px;font-size:12px">Carregar PNG</button>
+              <button type="button" id="btn-sig-remover" class="btn" style="padding:6px 14px;font-size:12px;display:none">Remover</button>
+            </div>
+          </div>
+          <div class="help">PNG com fundo transparente, ~400px largura. Persiste em <code>evento.json</code> (base64). Gate de autorização: sem assinatura carregada, o envio de certificados fica desactivado.</div>
+        </div>
       </div>
     </div>
 
@@ -512,7 +525,7 @@
         <div class="full">
           <label>Corpo do email (HTML)</label>
           <textarea id="evt-email-body" rows="10" style="font-family: 'SF Mono', Consolas, monospace; font-size: 12px;"></textarea>
-          <div class="help">Suporta os mesmos placeholders + <code>{{Cargo}}</code>, <code>{{Entidade}}</code>, <code>{{Link}}</code>, <code>{{Local}}</code>, <code>{{HoraInicio}}</code>, <code>{{HoraFim}}</code>, <code>{{CargaHoraria}}</code>.</div>
+          <div class="help">Suporta os mesmos placeholders + <code>{{Cargo}}</code>, <code>{{Entidade}}</code>, <code>{{Link}}</code>, <code>{{LinkApreciacao}}</code>, <code>{{Local}}</code>, <code>{{HoraInicio}}</code>, <code>{{HoraFim}}</code>, <code>{{CargaHoraria}}</code>, <code>{{Signatario}}</code>, <code>{{SignatarioCargo}}</code>, <code>{{AssinaturaImagem}}</code>.</div>
         </div>
       </div>
     </div>
@@ -715,6 +728,8 @@
       <div class="alert info">
         <strong>Como funciona:</strong> 1) carrega o Excel na tab Inscritos para teres os emails em sessão; 2) clica "Gerar zip"; 3) extrai o zip; 4) selecciona todos os <code>.eml</code> e arrasta para Outlook → Drafts; 5) Selecciona todas as drafts e Send.
       </div>
+
+      <div id="envio-gate-assinatura" class="alert"></div>
 
       <div id="envio-tabela"></div>
 
