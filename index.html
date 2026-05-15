@@ -531,6 +531,16 @@
     </div>
 
     <div class="panel">
+      <h2>Acessos Staff (até 5 contas)</h2>
+      <p class="lead">Cada operador no balcão / porta / p.html faz login com Utilizador + Palavra-passe. As palavras-passe são guardadas como hash SHA-256 em <code>evento.json</code> — o texto original nunca é gravado. Deixar campos vazios para desactivar um slot.</p>
+      <div id="users-grid" style="display:grid;grid-template-columns:30px 1fr 1fr 90px;gap:8px;align-items:center;font-size:13px"></div>
+      <div class="help" style="margin-top:10px">
+        Operadores escolhem o nome no dropdown no tablet e introduzem só a sua palavra-passe — não vêem o PAT do GitHub.
+        O PAT é configurado uma vez por tablet em <em>Configurar tablet</em> dentro de cada app, e fica gravado em localStorage.
+      </div>
+    </div>
+
+    <div class="panel">
       <h2>Apreciação · Microsoft Forms</h2>
       <p class="lead">URL do questionário Microsoft Forms aplicado presencialmente no balcão de saída. Lido via código QR, com pré-preenchimento da identificação do participante.</p>
       <div class="form-grid">

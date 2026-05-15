@@ -397,6 +397,7 @@
       signatarioCargo: 'Comandante do RSBL',
       assinaturaComandantePng: '',   // data URL base64 PNG, carregada via Setup
       assinaturaCarregadaEm: '',     // ISO timestamp
+      users: [],                     // 5 max · {nome, passHash} · usado em balcao/p.html/porta
       msFormsUrl: '',                // URL do MS Forms com placeholders {id} {nome} {cargo} {entidade}
       emailFrom: '',
       emailCc: '',
@@ -465,6 +466,31 @@
     $('evt-bridge-url').value = e.bridgeUrl || '';
     $('evt-bridge-secret').value = getBridgeSecret();
     $('evt-bridge-from').value = e.bridgeFrom || '';
+    renderUsersGrid();
+  }
+
+  function renderUsersGrid() {
+    const grid = $('users-grid');
+    if (!grid) return;
+    const e = ST.evento || {};
+    const users = Array.isArray(e.users) ? e.users : [];
+    const linhas = [
+      '<div style="font-size:11px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">#</div>',
+      '<div style="font-size:11px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">Nome de utilizador</div>',
+      '<div style="font-size:11px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">Palavra-passe</div>',
+      '<div style="font-size:11px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">Estado</div>'
+    ];
+    for (let i = 0; i < 5; i++) {
+      const u = users[i] || { nome: '', passHash: '' };
+      const temPass = !!u.passHash;
+      linhas.push(`<div style="color:var(--texto-mute);font-weight:600">${i + 1}</div>`);
+      linhas.push(`<input type="text" id="user-nome-${i}" value="${escapeHtml(u.nome || '')}" placeholder="(slot vazio)" style="padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px">`);
+      linhas.push(`<input type="password" id="user-pass-${i}" value="" placeholder="${temPass ? '(actual — deixar vazio para manter)' : 'definir nova'}" style="padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px">`);
+      const pillCor = u.nome && temPass ? '#1e8a3a' : (u.nome ? '#c46c00' : '#aaa');
+      const pillTxt = u.nome && temPass ? 'Activo' : (u.nome ? 'Sem pass' : 'Vazio');
+      linhas.push(`<span style="background:${pillCor};color:#fff;font-size:11px;padding:3px 8px;border-radius:999px;font-weight:600;text-align:center">${pillTxt}</span>`);
+    }
+    grid.innerHTML = linhas.join('');
   }
   function lerSetup() {
     const e = ST.evento || eventoDefault();
@@ -497,12 +523,33 @@
     e.actualizadoEm = nowIso();
     return e;
   }
+  // Lê os 5 slots de users do Setup. Para cada slot, preserva o hash anterior
+  // se a password ficar vazia (modo "manter actual"). Hash SHA-256 da password
+  // ANTES de gravar em evento.json.
+  async function lerUsersSetup() {
+    const anteriores = (ST.evento && Array.isArray(ST.evento.users)) ? ST.evento.users : [];
+    const out = [];
+    for (let i = 0; i < 5; i++) {
+      const nome = ($('user-nome-' + i) ? $('user-nome-' + i).value : '').trim();
+      const pass = ($('user-pass-' + i) ? $('user-pass-' + i).value : '');
+      if (!nome) continue; // slot vazio
+      let passHash = '';
+      if (pass) {
+        passHash = await sha256Hex(pass);
+      } else if (anteriores[i] && anteriores[i].nome === nome && anteriores[i].passHash) {
+        passHash = anteriores[i].passHash; // manter o hash anterior se o nome não mudou
+      }
+      out.push({ nome, passHash });
+    }
+    return out;
+  }
   async function setupGuardar() {
     const e = lerSetup();
     if (!e.titulo || !e.data) {
       toast('Título e data são obrigatórios.', 'err');
       return;
     }
+    e.users = await lerUsersSetup();
     setLoading(true, 'A publicar evento.json…');
     try {
       ST.eventoSha = await ghEscreverComRetry(
@@ -513,6 +560,7 @@
       );
       ST.evento = e;
       $('evt-titulo-h').textContent = e.titulo || 'RSB Lisboa';
+      renderUsersGrid(); // refresca pills "Activo/Sem pass/Vazio"
       toast('Configuração guardada.', 'ok');
       setLoading(false);
     } catch (err) {
