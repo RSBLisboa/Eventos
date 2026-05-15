@@ -216,6 +216,44 @@
     const j = await res.json();
     return j.content.sha;
   }
+  // Escrita binária (PNG/JPEG). content já vem em base64 (sem prefix data:).
+  async function ghEscreverBinario(path, base64Content, sha, message, repo) {
+    repo = repo || CONFIG.repoData;
+    const body = {
+      message: message || `update ${path} · ${nowIso()}`,
+      content: base64Content,
+      branch: CONFIG.branch
+    };
+    if (sha) body.sha = sha;
+    const res = await fetch(
+      `https://api.github.com/repos/${CONFIG.githubOwner}/${repo}/contents/${encodeURI(path)}`,
+      { method: 'PUT', headers: ghHeaders(), body: JSON.stringify(body) }
+    );
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`PUT ${path}: ${res.status} ${t}`);
+    }
+    return (await res.json()).content.sha;
+  }
+  async function ghApagar(path, sha, message, repo) {
+    repo = repo || CONFIG.repoData;
+    if (!sha) return false;
+    const body = {
+      message: message || `delete ${path} · ${nowIso()}`,
+      sha: sha,
+      branch: CONFIG.branch
+    };
+    const res = await fetch(
+      `https://api.github.com/repos/${CONFIG.githubOwner}/${repo}/contents/${encodeURI(path)}`,
+      { method: 'DELETE', headers: ghHeaders(), body: JSON.stringify(body) }
+    );
+    if (!res.ok && res.status !== 404) {
+      const t = await res.text();
+      throw new Error(`DELETE ${path}: ${res.status} ${t}`);
+    }
+    return true;
+  }
+
   // Escrita com retry uma vez em caso de conflict (refetch + reaplica).
   async function ghEscreverComRetry(path, novoPayloadFn, shaActualFn, message, repo) {
     try {
@@ -1071,7 +1109,7 @@
       let prox = e.proxNumeroCert || 1;
 
       for (const inscrito of aEmitir) {
-        const numero = ano + '/' + String(prox).padStart(4, '0');
+        const numero = String(prox).padStart(4, '0') + '/' + ano;
         const { link, hash } = await gerarLinkCert(inscrito, numero, dataEvento, dataEmissao);
         ST.certificados.push({
           numero, idInscricao: inscrito.id,
@@ -1823,12 +1861,34 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       if (!ST.evento) ST.evento = eventoDefault();
       ST.evento.assinaturaComandantePng = reader.result;
       ST.evento.assinaturaCarregadaEm = nowIso();
       renderAssinaturaPreview(reader.result);
-      toast('Assinatura carregada. Clica "Guardar configuração" para persistir.', 'ok');
+      toast('A publicar PNG no repo Certificados…', 'ok');
+      // Publicar como ficheiro binário em Certificados/assets/ para o index.html
+      // do certificado conseguir renderizar a imagem. Sem este passo a SPA ficaria
+      // só com a imagem no evento.json (para os emails) mas não nos certificados.
+      try {
+        const base64 = String(reader.result).replace(/^data:image\/[a-z]+;base64,/i, '');
+        let sha = null;
+        try {
+          const cur = await ghLer('assets/assinatura-comandante.png', CONFIG.repoCerts);
+          sha = cur.sha;
+        } catch (_) { /* 404 = primeiro upload, sha fica null */ }
+        await ghEscreverBinario(
+          'assets/assinatura-comandante.png',
+          base64,
+          sha,
+          'asset: assinatura do comandante carregada via Setup',
+          CONFIG.repoCerts
+        );
+        toast('Assinatura sincronizada (evento + repo Certificados). Clica "Guardar configuração" para persistir.', 'ok');
+      } catch (err) {
+        console.error(err);
+        toast('PNG guardado localmente mas falhou publicar no repo Certificados: ' + err.message, 'err');
+      }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -1843,7 +1903,21 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       ST.evento.assinaturaCarregadaEm = '';
     }
     renderAssinaturaPreview('');
-    toast('Assinatura removida. Clica "Guardar configuração" para persistir.', 'ok');
+    // Remover também do repo Certificados
+    try {
+      const cur = await ghLer('assets/assinatura-comandante.png', CONFIG.repoCerts);
+      if (cur.sha) {
+        await ghApagar(
+          'assets/assinatura-comandante.png',
+          cur.sha,
+          'asset: remover assinatura via Setup',
+          CONFIG.repoCerts
+        );
+      }
+    } catch (err) {
+      console.warn('Falha a remover PNG do repo Certificados:', err);
+    }
+    toast('Assinatura removida (evento + repo Certificados). Clica "Guardar configuração" para persistir.', 'ok');
   }
 
   // Gate de envio: bloqueia se nao houver assinatura carregada no evento.json
