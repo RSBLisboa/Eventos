@@ -67,7 +67,7 @@
     inscritosAdmin: {},     // map id → email (privado, sessionStorage)
     presencas: null,        // raw payload
     presencasSha: null,
-    certificados: [],       // [{numero, idInscricao, hash, link, tokenApreciacao, linkApreciacao, dataEmissao, dataEnvioEmail, anulado}]
+    certificados: [],       // [{numero, idInscricao, hash, link, dataEmissao, dataEnvioEmail, anulado}]
     certificadosSha: null,
     pollTimer: null,
     activeTab: 'setup',
@@ -359,6 +359,7 @@
       signatarioCargo: 'Comandante do RSBL',
       assinaturaComandantePng: '',   // data URL base64 PNG, carregada via Setup
       assinaturaCarregadaEm: '',     // ISO timestamp
+      msFormsUrl: '',                // URL do MS Forms com placeholders {id} {nome} {cargo} {entidade}
       emailFrom: '',
       emailCc: '',
       emailSubject: 'Certificado de Participação · Sessão Técnica em Substâncias Perigosas',
@@ -417,6 +418,7 @@
     $('evt-sig-nome').value = e.signatario || '';
     $('evt-sig-cargo').value = e.signatarioCargo || '';
     renderAssinaturaPreview(e.assinaturaComandantePng);
+    if ($('evt-ms-forms-url')) $('evt-ms-forms-url').value = e.msFormsUrl || '';
     $('evt-email-from').value = e.emailFrom || '';
     $('evt-email-cc').value = e.emailCc || '';
     $('evt-email-subject').value = e.emailSubject || '';
@@ -440,6 +442,7 @@
     e.descricao = $('evt-descricao').value.trim();
     e.signatario = $('evt-sig-nome').value.trim();
     e.signatarioCargo = $('evt-sig-cargo').value.trim();
+    if ($('evt-ms-forms-url')) e.msFormsUrl = $('evt-ms-forms-url').value.trim();
     e.emailFrom = $('evt-email-from').value.trim();
     e.emailCc = $('evt-email-cc').value.trim();
     e.emailSubject = $('evt-email-subject').value.trim();
@@ -856,21 +859,10 @@
       `Vai escrever ${ST.inscritos.length} inscritos em data/inscritos.json (sem emails). Continuar?`);
     if (!ok) return;
 
-    // Embeber tokenApreciacao por inscrito (SHA-256(id|SECRET).substring(0,16)),
-    // para que a PWA Presencas possa gerar o QR de apreciacao sem conhecer a SECRET.
-    // Se a SECRET nao estiver em sessao, o token fica vazio e a PWA mostra aviso.
-    const secret = getSecret();
-    const inscritosComToken = [];
-    for (const i of ST.inscritos) {
-      const tokenApreciacao = secret
-        ? (await sha256Hex(i.id + '|' + secret)).substring(0, 16).toLowerCase()
-        : '';
-      inscritosComToken.push(Object.assign({}, i, { tokenApreciacao }));
-    }
-    if (!secret) {
-      toast('AVISO: SECRET ausente. Tokens de apreciacao ficaram vazios. Preenche SECRET no Setup e republica.', 'err');
-    }
-
+    // Na arquitectura Microsoft, o token criptografico deixou de ser necessario:
+    // o questionario corre em MS Forms, que valida a identidade pela presenca
+    // do operador no balcao + ecra de confirmacao apresentado.
+    // O hash continua a ser usado APENAS para os certificados (gerarLinkCert).
     const payload = {
       schema: 'inscritos@1',
       evento: {
@@ -883,8 +875,8 @@
         cargaHoraria: ST.evento.cargaHoraria
       },
       exportadoEm: nowIso(),
-      total: inscritosComToken.length,
-      inscritos: inscritosComToken
+      total: ST.inscritos.length,
+      inscritos: ST.inscritos
     };
 
     setLoading(true, 'A publicar inscritos.json…');
@@ -995,13 +987,7 @@
     if (e.titulo) link += '&t=' + enc(e.titulo);
     if (e.local) link += '&l=' + enc(e.local);
     link += '&v=' + hash;
-
-    // Link único para apreciacao.html. Token = SHA-256(idInscricao|SECRET).substring(0,16).
-    // Validado em apreciacao.html (client) e no bridge Apps Script (server, antes de persistir).
-    const tokenApreciacao = (await sha256Hex(inscrito.id + '|' + secret)).substring(0, 16).toLowerCase();
-    const linkApreciacao = CONFIG.baseUrlCerts + 'apreciacao.html?id=' + enc(inscrito.id) + '&t=' + tokenApreciacao;
-
-    return { link, hash, tokenApreciacao, linkApreciacao };
+    return { link, hash };
   }
 
   // Devolve a tag HTML <img> da assinatura do Comandante, ou string vazia se
@@ -1010,16 +996,6 @@
     const e = ST.evento || {};
     if (!e.assinaturaComandantePng) return '';
     return '<img src="' + e.assinaturaComandantePng + '" alt="Assinatura" style="display:block;max-height:80px;max-width:240px;margin:6px 0 2px">';
-  }
-
-  // Devolve link de apreciação para um cert existente. Recalcula se for certificado
-  // antigo (emitido antes desta versão) que ainda não tem linkApreciacao gravado.
-  async function obterLinkApreciacao(cert) {
-    if (cert.linkApreciacao) return cert.linkApreciacao;
-    const secret = getSecret();
-    if (!secret) return '';
-    const t = (await sha256Hex(cert.idInscricao + '|' + secret)).substring(0, 16).toLowerCase();
-    return CONFIG.baseUrlCerts + 'apreciacao.html?id=' + encodeURIComponent(cert.idInscricao) + '&t=' + t;
   }
   function renderEmissao() {
     const presMap = getPresencasMap();
@@ -1096,11 +1072,10 @@
 
       for (const inscrito of aEmitir) {
         const numero = ano + '/' + String(prox).padStart(4, '0');
-        const { link, hash, tokenApreciacao, linkApreciacao } = await gerarLinkCert(inscrito, numero, dataEvento, dataEmissao);
+        const { link, hash } = await gerarLinkCert(inscrito, numero, dataEvento, dataEmissao);
         ST.certificados.push({
           numero, idInscricao: inscrito.id,
           hash, link,
-          tokenApreciacao, linkApreciacao,
           dataEmissao: nowIso(),
           dataEnvioEmail: null,
           anulado: false
@@ -1268,7 +1243,6 @@
   async function buildEmlContent(cert, inscrito, email) {
     const e = ST.evento;
     const dataEvento = dataPorExtenso(e.data);
-    const linkApreciacao = await obterLinkApreciacao(cert);
     const vars = {
       Nome: inscrito.nome,
       Email: email,
@@ -1282,7 +1256,6 @@
       CargaHoraria: e.cargaHoraria || '',
       NumeroCertificado: cert.numero,
       Link: cert.link,
-      LinkApreciacao: linkApreciacao,
       Signatario: e.signatario || 'TCor Eng. Alexandre Rodrigues',
       SignatarioCargo: e.signatarioCargo || 'Comandante do RSBL',
       AssinaturaImagem: assinaturaImagemTag()
@@ -1422,7 +1395,6 @@ Total: ${n} emails
       const inscrito = inscritosMap.get(cert.idInscricao);
       if (!inscrito) continue;
       const e = ST.evento;
-      const linkApreciacao = await obterLinkApreciacao(cert);
       const sig = e.signatario || 'TCor Eng. Alexandre Rodrigues';
       const sigCargo = e.signatarioCargo || 'Comandante do RSBL';
       const vars = {
@@ -1430,7 +1402,6 @@ Total: ${n} emails
         NumeroCertificado: cert.numero, DataEvento: dataPorExtenso(e.data),
         Local: e.local, Cargo: inscrito.cargo, Entidade: inscrito.entidade,
         CargaHoraria: e.cargaHoraria, HoraInicio: e.horaInicio, HoraFim: e.horaFim,
-        LinkApreciacao: linkApreciacao,
         Signatario: sig, SignatarioCargo: sigCargo,
         AssinaturaImagem: assinaturaImagemTag()
       };
@@ -1538,7 +1509,6 @@ Total: ${n} emails
       const inscrito = inscritosMap.get(cert.idInscricao);
       if (!inscrito) continue;
       const e = ST.evento;
-      const linkApreciacao = await obterLinkApreciacao(cert);
       const vars = {
         Nome: inscrito.nome, Email: email,
         Cargo: inscrito.cargo || '', Entidade: inscrito.entidade || '',
@@ -1546,7 +1516,6 @@ Total: ${n} emails
         HoraInicio: e.horaInicio || '', HoraFim: e.horaFim || '',
         Local: e.local || '', CargaHoraria: e.cargaHoraria || '',
         NumeroCertificado: cert.numero, Link: cert.link,
-        LinkApreciacao: linkApreciacao,
         Signatario: e.signatario || 'TCor Eng. Alexandre Rodrigues',
         SignatarioCargo: e.signatarioCargo || 'Comandante do RSBL',
         AssinaturaImagem: assinaturaImagemTag()

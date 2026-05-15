@@ -525,13 +525,25 @@
         <div class="full">
           <label>Corpo do email (HTML)</label>
           <textarea id="evt-email-body" rows="10" style="font-family: 'SF Mono', Consolas, monospace; font-size: 12px;"></textarea>
-          <div class="help">Suporta os mesmos placeholders + <code>{{Cargo}}</code>, <code>{{Entidade}}</code>, <code>{{Link}}</code>, <code>{{LinkApreciacao}}</code>, <code>{{Local}}</code>, <code>{{HoraInicio}}</code>, <code>{{HoraFim}}</code>, <code>{{CargaHoraria}}</code>, <code>{{Signatario}}</code>, <code>{{SignatarioCargo}}</code>, <code>{{AssinaturaImagem}}</code>.</div>
+          <div class="help">Suporta os mesmos placeholders + <code>{{Cargo}}</code>, <code>{{Entidade}}</code>, <code>{{Link}}</code>, <code>{{Local}}</code>, <code>{{HoraInicio}}</code>, <code>{{HoraFim}}</code>, <code>{{CargaHoraria}}</code>, <code>{{Signatario}}</code>, <code>{{SignatarioCargo}}</code>, <code>{{AssinaturaImagem}}</code>.</div>
         </div>
       </div>
     </div>
 
     <div class="panel">
-      <h2>Bridge Apps Script (envio automatizado — opcional)</h2>
+      <h2>Apreciação · Microsoft Forms</h2>
+      <p class="lead">URL do questionário Microsoft Forms aplicado presencialmente no balcão de saída. Lido via código QR, com pré-preenchimento da identificação do participante.</p>
+      <div class="form-grid">
+        <div class="full">
+          <label>URL do MS Forms com pre-fill</label>
+          <input type="text" id="evt-ms-forms-url" placeholder="https://forms.office.com/r/XXXXXXXXXX?r1={nome}&amp;r2={id}">
+          <div class="help">Placeholders suportados: <code>{id}</code>, <code>{nome}</code>, <code>{cargo}</code>, <code>{entidade}</code>. No portal Microsoft Forms: <em>Collect responses → Get a link with pre-filled answers</em>. Substitui os valores das perguntas pelos placeholders na URL copiada.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="display:none" id="panel-bridge-legacy">
+      <h2>Bridge Apps Script (legacy — escondido)</h2>
       <p class="lead">Envio direto via Gmail/Workspace, sem passar pelo Outlook. Requer deploy de um pequeno Apps Script (ver <code>bridge/apps-script-bridge.gs</code> + README).</p>
       <div class="form-grid">
         <div class="full">
@@ -734,8 +746,8 @@
       <div id="envio-tabela"></div>
 
       <div class="actions">
-        <button class="btn success" id="btn-envio-bridge" title="Envia automaticamente via Gmail (configurar bridge na tab Setup)">⚡ Enviar via bridge</button>
-        <button class="btn" id="btn-envio-zip">Gerar zip de .eml</button>
+        <button class="btn success" id="btn-envio-bridge" style="display:none" title="Legacy: Gmail bridge (escondido na arquitectura Microsoft)">⚡ Enviar via bridge</button>
+        <button class="btn" id="btn-envio-zip">Gerar zip de .eml para Outlook</button>
         <button class="btn secondary" id="btn-envio-mailto">Abrir mailto:</button>
         <button class="btn secondary" id="btn-envio-marcar-enviados">Marcar como enviados (sem enviar)</button>
         <button class="btn secondary" id="btn-envio-reload">Recarregar</button>
