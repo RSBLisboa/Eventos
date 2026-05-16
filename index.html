@@ -420,7 +420,8 @@
 </header>
 
 <nav class="tabs">
-  <button data-tab="setup" class="active">Setup</button>
+  <button data-tab="dashboard" class="active">Dashboard</button>
+  <button data-tab="setup">Setup</button>
   <button data-tab="inscritos">Inscritos <span class="badge" id="badge-inscritos">0</span></button>
   <button data-tab="presencas">Presenças <span class="badge" id="badge-presencas">0</span></button>
   <button data-tab="emissao">Emissão <span class="badge" id="badge-emissao">0</span></button>
@@ -431,8 +432,39 @@
 
 <main>
 
+  <!-- ════════════ DASHBOARD ════════════ -->
+  <section class="tab-panel active" id="tab-dashboard">
+    <div class="panel">
+      <h2 id="dash-titulo-evento">Sessão Técnica em Substâncias Perigosas</h2>
+      <p class="lead" id="dash-subtitulo">A carregar dados…</p>
+
+      <!-- Cards de stats -->
+      <div class="stats" id="dash-stats" style="margin-bottom:16px"></div>
+
+      <!-- Live feed + acções rápidas -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+        <div>
+          <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--texto-mute);margin:0 0 8px">Última actividade</h3>
+          <div id="dash-feed" style="background:#fafafa;border:1px solid var(--linha);border-radius:8px;max-height:380px;overflow-y:auto;padding:6px 0"></div>
+        </div>
+        <div>
+          <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--texto-mute);margin:0 0 8px">Acessos rápidos</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <a class="btn secondary" href="https://rsblisboa.github.io/Presencas/" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">📋 Acolhimento (tablet)</a>
+            <a class="btn secondary" href="https://rsblisboa.github.io/Presencas/crachas.html" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">🪪 Crachás (impressão)</a>
+            <a class="btn secondary" href="https://rsblisboa.github.io/Certificados/p.html?demo=1" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">📱 Página participante (demo)</a>
+            <a class="btn secondary" href="https://github.com/RSBLisboa/Presencas/issues" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">🐙 Issues (workflow)</a>
+            <button class="btn secondary" id="dash-reload" style="grid-column:1/-1">↻ Recarregar dados</button>
+          </div>
+          <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--texto-mute);margin:18px 0 8px">Inscritos com email</h3>
+          <div id="dash-emails-stats" style="background:#fafafa;border:1px solid var(--linha);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ════════════ SETUP ════════════ -->
-  <section class="tab-panel active" id="tab-setup">
+  <section class="tab-panel" id="tab-setup">
     <div class="panel">
       <h2>Configuração do evento</h2>
       <p class="lead">Metadados do evento usados para emitir certificados e popular a app de presenças. Guardado em <code>data/evento.json</code> (público — sem PII).</p>
@@ -623,7 +655,10 @@
 
     <div class="panel">
       <h2>Lista pública</h2>
-      <p class="lead">Estado actual de <code>data/inscritos.json</code> no GitHub (versão sem emails, lida pela app de presenças).</p>
+      <p class="lead">Estado actual de <code>data/inscritos.json</code> no GitHub. Schema <code>inscritos@2</code> inclui <code>token</code>, <code>email</code> e <code>autorizaContacto</code>.</p>
+      <div style="margin:10px 0 12px">
+        <input type="search" id="inscritos-busca" placeholder="Pesquisar nome, cargo, entidade, email, token…" autocomplete="off" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid var(--linha);border-radius:8px;background:#fafafa;font-family:inherit">
+      </div>
       <div id="inscritos-publica"></div>
       <div id="inscritos-unsaved" class="alert warn hide" style="margin-top:10px">
         ⚠️ Existem alterações não publicadas. Clica "Publicar inscritos.json" para enviar para o GitHub.

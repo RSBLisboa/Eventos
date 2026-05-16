@@ -327,13 +327,18 @@
     setLoading(true, 'A carregar dados…');
     ssCarregarEmails();
     try {
-      // Carregar em paralelo
-      const [evt, ins, pres, certs] = await Promise.all([
+      // Carregar em paralelo (entregas + apreciacao acrescentados para o dashboard)
+      const [evt, ins, pres, certs, entr, apr] = await Promise.all([
         ghLer('data/evento.json').catch(() => ({ sha: null, payload: null })),
         ghLer('data/inscritos.json').catch(() => ({ sha: null, payload: null })),
         ghLer('data/presencas.json').catch(() => ({ sha: null, payload: null })),
-        ghLer('data/certificados.json').catch(() => ({ sha: null, payload: null }))
+        ghLer('data/certificados.json').catch(() => ({ sha: null, payload: null })),
+        ghLer('data/entregas.json').catch(() => ({ sha: null, payload: null })),
+        ghLer('data/apreciacao.json').catch(() => ({ sha: null, payload: null }))
       ]);
+
+      ST.entregas = (entr.payload && entr.payload.entregas) || [];
+      ST.apreciacao = (apr.payload && apr.payload.respostas) || [];
 
       ST.eventoSha = evt.sha;
       ST.evento = evt.payload || eventoDefault();
@@ -358,6 +363,7 @@
 
       // Render
       hidratarSetup();
+      renderDashboard();
       renderInscritos();
       renderPresencas();
       renderEmissao();
@@ -737,15 +743,36 @@
     const previewEl = $('inscritos-preview');
     const publicaEl = $('inscritos-publica');
 
+    // Aplicar busca (se preenchida)
+    const busca = (ST.inscritosBusca || '').trim();
+    let lista = ST.inscritos;
+    if (busca) {
+      const q = normalizar(busca);
+      lista = ST.inscritos.filter(i => {
+        const emailLocal = ST.inscritosAdmin[i.id] || '';
+        return normalizar(i.nome || '').includes(q)
+          || normalizar(i.cargo || '').includes(q)
+          || normalizar(i.entidade || '').includes(q)
+          || normalizar(i.email || '').includes(q)
+          || normalizar(emailLocal).includes(q)
+          || normalizar(i.token || '').includes(q)
+          || String(i.id || '').includes(q);
+      });
+    }
+
     // Preview do Excel (em sessão)
     if (ST.inscritos.length > 0) {
-      const semEmail = ST.inscritos.filter(i => !ST.inscritosAdmin[i.id]).length;
+      const semEmail = ST.inscritos.filter(i => !ST.inscritosAdmin[i.id] && !i.email).length;
       previewEl.classList.remove('hide');
+      const filtroInfo = busca
+        ? ` · A mostrar <strong>${lista.length}</strong> resultados para "${escapeHtml(busca)}"`
+        : '';
       previewEl.innerHTML = `
         <div class="alert ${semEmail > 0 ? 'warn' : 'ok'}">
           <strong>${ST.inscritos.length}</strong> inscritos em sessão
           ${semEmail > 0 ? ` · <strong>${semEmail}</strong> sem email (não receberão certificado)` : ''}
-        </div>` + tabelaInscritos(ST.inscritos, true);
+          ${filtroInfo}
+        </div>` + tabelaInscritos(lista, true);
     } else {
       previewEl.classList.add('hide');
       previewEl.innerHTML = '';
@@ -1796,9 +1823,83 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     ST.activeTab = name;
     $$('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
     $$('section.tab-panel').forEach(s => s.classList.toggle('active', s.id === 'tab-' + name));
+    if (name === 'dashboard') renderDashboard();
+    if (name === 'inscritos') renderInscritos();
     if (name === 'presencas') renderPresencas();
     if (name === 'emissao') renderEmissao();
     if (name === 'envio') renderEnvio();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DASHBOARD
+  // ═══════════════════════════════════════════════════════════════════════════
+  function renderDashboard() {
+    if (!$('tab-dashboard')) return;
+    const tot = ST.inscritos.length;
+    let pres = 0;
+    const presencasMarcacoes = (ST.presencas && Array.isArray(ST.presencas.marcacoes)) ? ST.presencas.marcacoes : [];
+    for (const m of presencasMarcacoes) if (m.presente) pres++;
+    const entr = (ST.entregas || []).length;
+    const apr = (ST.apreciacao || []).length;
+    const certs = (ST.certificados || []).filter(c => !c.anulado).length;
+    const comEmail = ST.inscritos.filter(i => i.email).length;
+    const comToken = ST.inscritos.filter(i => i.token).length;
+    const autorizam = ST.inscritos.filter(i => i.autorizaContacto).length;
+
+    $('dash-titulo-evento').textContent = (ST.evento && ST.evento.titulo) || 'Evento sem título';
+    const dataLocal = [(ST.evento && ST.evento.data) || '', (ST.evento && ST.evento.local) || ''].filter(Boolean).join(' · ');
+    $('dash-subtitulo').textContent = dataLocal || 'A carregar dados…';
+
+    $('dash-stats').innerHTML = `
+      <div class="stat-card pres"><div class="n">${pres}</div><div class="l">Presentes</div></div>
+      <div class="stat-card"><div class="n">${tot}</div><div class="l">Inscritos</div></div>
+      <div class="stat-card aviso"><div class="n">${tot - pres}</div><div class="l">Por marcar</div></div>
+      <div class="stat-card"><div class="n">${entr}</div><div class="l">Livretos entregues</div></div>
+      <div class="stat-card"><div class="n">${apr}</div><div class="l">Respostas Apreciação</div></div>
+      <div class="stat-card"><div class="n">${certs}</div><div class="l">Certificados emitidos</div></div>
+    `;
+
+    $('dash-emails-stats').innerHTML = `
+      <div>📧 <strong>${comEmail}</strong>/${tot} inscritos com email (<strong>${tot > 0 ? Math.round(100*comEmail/tot) : 0}%</strong>)</div>
+      <div>🔑 <strong>${comToken}</strong>/${tot} com token gerado</div>
+      <div>✓ <strong>${autorizam}</strong> autorizam contacto para iniciativas RSB</div>
+    `;
+
+    // Live feed: últimas 15 actividades (presenças + entregas + apreciação), ordenadas desc.
+    const feed = [];
+    for (const m of presencasMarcacoes) {
+      if (m.presente && m.horaEntrada) {
+        const i = ST.inscritos.find(x => x.id === m.idInscricao);
+        if (i) feed.push({ ts: m.horaEntrada, tipo: 'pres', nome: i.nome, info: m.marcadoPor || '' });
+      }
+    }
+    for (const e of (ST.entregas || [])) {
+      const i = ST.inscritos.find(x => x.id === e.idInscricao);
+      if (i) feed.push({ ts: e.entregueEm, tipo: 'entr', nome: i.nome, info: e.entreguePor || '' });
+    }
+    for (const r of (ST.apreciacao || [])) {
+      const i = ST.inscritos.find(x => x.id === r.idInscricao);
+      if (i) feed.push({ ts: r.submetidoEm, tipo: 'apr', nome: i.nome, info: r.email || '' });
+    }
+    feed.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+
+    if (feed.length === 0) {
+      $('dash-feed').innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--texto-mute);font-size:13px">Sem actividade ainda. O feed actualiza assim que houver primeiras marcações.</div>';
+    } else {
+      const iconeTipo = { pres: '✓', entr: '🪪', apr: '📋' };
+      const corTipo = { pres: 'var(--verde)', entr: 'var(--rsb-vermelho)', apr: 'var(--info)' };
+      const labelTipo = { pres: 'Presente', entr: 'Livreto entregue', apr: 'Apreciação' };
+      $('dash-feed').innerHTML = feed.slice(0, 15).map(f => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--linha)">
+          <div style="width:28px;height:28px;border-radius:50%;background:${corTipo[f.tipo]};color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${iconeTipo[f.tipo]}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.nome)}</div>
+            <div style="font-size:11.5px;color:var(--texto-mute)">${labelTipo[f.tipo]}${f.info ? ' · ' + escapeHtml(f.info) : ''}</div>
+          </div>
+          <div style="font-size:11px;color:var(--texto-mute);font-family:'SF Mono',Consolas,monospace;flex-shrink:0">${escapeHtml((f.ts || '').slice(11, 16))}</div>
+        </div>
+      `).join('');
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1831,6 +1932,33 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       if (e.dataTransfer.files[0]) processarExcel(e.dataTransfer.files[0]);
     });
     fi.addEventListener('change', () => { if (fi.files[0]) processarExcel(fi.files[0]); });
+
+    // Pesquisa rápida na aba Inscritos
+    const inputBusca = $('inscritos-busca');
+    if (inputBusca) {
+      inputBusca.addEventListener('input', () => {
+        ST.inscritosBusca = inputBusca.value;
+        renderInscritos();
+      });
+    }
+
+    // Dashboard · botão recarregar
+    const dashReload = $('dash-reload');
+    if (dashReload) {
+      dashReload.addEventListener('click', async () => {
+        dashReload.disabled = true;
+        dashReload.textContent = '↻ A recarregar…';
+        try {
+          await iniciar();
+          toast('Dashboard actualizado.', 'ok');
+        } catch (e) {
+          toast('Erro: ' + e.message, 'err');
+        } finally {
+          dashReload.disabled = false;
+          dashReload.textContent = '↻ Recarregar dados';
+        }
+      });
+    }
 
     $('btn-inscritos-publish').addEventListener('click', inscritosPublicar);
     $('btn-inscritos-reload').addEventListener('click', async () => {
