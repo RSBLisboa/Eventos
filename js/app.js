@@ -696,8 +696,21 @@
           return;
         }
 
+        // Preservar campos desconhecidos (token, email, temMail, idRespostaForms)
+        // dos inscritos antigos com o mesmo id — caso contrario, importar Excel apaga
+        // os tokens gerados externamente. Match estritamente por id.
+        let tokensPreservados = 0;
+        const indexAntigo = new Map((ST.inscritos || []).map(i => [i.id, i]));
+        const inscritosMerged = inscritos.map(novo => {
+          const antigo = indexAntigo.get(novo.id);
+          if (!antigo) return novo;
+          const merged = Object.assign({}, antigo, novo);
+          if (antigo.token) tokensPreservados++;
+          return merged;
+        });
+
         // Stage no estado
-        ST.inscritos = inscritos.sort((a, b) => normalizar(a.nome).localeCompare(normalizar(b.nome)));
+        ST.inscritos = inscritosMerged.sort((a, b) => normalizar(a.nome).localeCompare(normalizar(b.nome)));
         ST.inscritosAdmin = emails;
         ssGravarEmails();
 
@@ -710,6 +723,7 @@
         if (multiEmail) detalhes.push(`${multiEmail} com múltiplos emails (juntados com vírgula)`);
         if (semEmailCount) detalhes.push(`${semEmailCount} sem email`);
         if (naoEnviarCount) detalhes.push(`${naoEnviarCount} flagged "Não enviar Mail" (excluídos do envio)`);
+        if (tokensPreservados) detalhes.push(`${tokensPreservados} tokens preservados`);
         toast(`${inscritos.length} inscritos lidos${detalhes.length ? '. ' + detalhes.join(', ') : ''}. Clica "Publicar" para os tornar visíveis à app de presenças.`, 'ok');
       } catch (err) {
         console.error(err);
@@ -881,7 +895,9 @@
     } else {
       const idx = ST.inscritos.findIndex(x => x.id == id);
       if (idx < 0) { toast('Inscrito não encontrado.', 'err'); return; }
-      ST.inscritos[idx] = dados;
+      // Preservar campos desconhecidos (token, email, temMail, idRespostaForms, etc.)
+      // que possam ter sido escritos no JSON por outro fluxo (workflow, Office Script).
+      ST.inscritos[idx] = Object.assign({}, ST.inscritos[idx], dados);
     }
 
     // Email vai para sessionStorage (privado)
@@ -941,16 +957,26 @@
       toast('Configura o evento na tab Setup primeiro.', 'err');
       return;
     }
+
+    // Guard: detectar perda de tokens antes de publicar.
+    // Compara tokens no estado actual vs no ultimo publicado (carregado no load).
+    const tokensActuais = (ST.inscritos || []).filter(i => i.token).length;
+    const tokensPublicados = (ST.inscritosUltimoPublicado || []).filter(i => i.token).length;
+    if (tokensPublicados > 0 && tokensActuais < tokensPublicados) {
+      const perdidos = tokensPublicados - tokensActuais;
+      const okPerda = await confirmar(
+        '⚠️ AVISO: vais perder tokens',
+        `O JSON publicado tinha ${tokensPublicados} tokens; estás prestes a publicar uma versão com apenas ${tokensActuais}. Perderás ${perdidos} tokens — os QR codes desses participantes deixarão de funcionar para a Apreciação. Confirma SÓ se sabes o que estás a fazer.`
+      );
+      if (!okPerda) return;
+    }
+
     const ok = await confirmar('Publicar inscritos',
       `Vai escrever ${ST.inscritos.length} inscritos em data/inscritos.json (sem emails). Continuar?`);
     if (!ok) return;
 
-    // Na arquitectura Microsoft, o token criptografico deixou de ser necessario:
-    // o questionario corre em MS Forms, que valida a identidade pela presenca
-    // do operador no balcao + ecra de confirmacao apresentado.
-    // O hash continua a ser usado APENAS para os certificados (gerarLinkCert).
     const payload = {
-      schema: 'inscritos@1',
+      schema: 'inscritos@2',
       evento: {
         id: ST.evento.id,
         titulo: ST.evento.titulo,
@@ -1688,7 +1714,7 @@ Total: ${n} emails
       delete eventoSemSecret.secret;
       zip.file('evento.json', JSON.stringify(eventoSemSecret, null, 2));
       zip.file('inscritos.json', JSON.stringify({
-        schema: 'inscritos@1',
+        schema: 'inscritos@2',
         evento: ST.evento ? {
           id: ST.evento.id, titulo: ST.evento.titulo, data: ST.evento.data,
           local: ST.evento.local, horaInicio: ST.evento.horaInicio,
