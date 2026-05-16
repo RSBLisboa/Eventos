@@ -1059,7 +1059,18 @@
     $('pres-n-aus').textContent = aus;
     $('pres-pct').textContent = pct + '%';
 
-    const linhas = ST.inscritos.map(i => {
+    // Aplicar busca
+    let lista = ST.inscritos;
+    const busca = (ST.presencasBusca || '').trim();
+    if (busca) {
+      const q = normalizar(busca);
+      lista = ST.inscritos.filter(i =>
+        normalizar(i.nome || '').includes(q) ||
+        normalizar(i.cargo || '').includes(q) ||
+        normalizar(i.entidade || '').includes(q));
+    }
+
+    const linhas = lista.map(i => {
       const m = presMap.get(i.id);
       const presente = m && m.presente;
       return `<tr class="hover">
@@ -1158,7 +1169,21 @@
           ? '⚠️ SECRET ausente em sessão. Preenche na tab Setup (campo SECRET_HASH).'
           : '⚠️ Configura primeiro o evento (título, data) na tab Setup.');
 
-    const linhas = ST.inscritos.map(i => {
+    // Aplicar busca
+    let listaEm = ST.inscritos;
+    const buscaEm = (ST.emissaoBusca || '').trim();
+    if (buscaEm) {
+      const q = normalizar(buscaEm);
+      listaEm = ST.inscritos.filter(i => {
+        const c = certsMap.get(i.id);
+        return normalizar(i.nome || '').includes(q) ||
+          normalizar(i.cargo || '').includes(q) ||
+          normalizar(i.entidade || '').includes(q) ||
+          (c && normalizar(c.numero || '').includes(q));
+      });
+    }
+
+    const linhas = listaEm.map(i => {
       const m = presMap.get(i.id);
       const presente = m && m.presente;
       const c = certsMap.get(i.id);
@@ -1329,7 +1354,21 @@
       }
     }
 
-    const linhas = ST.certificados.map(c => {
+    // Aplicar busca
+    let listaCerts = ST.certificados;
+    const buscaEnv = (ST.envioBusca || '').trim();
+    if (buscaEnv) {
+      const q = normalizar(buscaEnv);
+      listaCerts = ST.certificados.filter(c => {
+        const i = inscritosMap.get(c.idInscricao) || {};
+        const email = ST.inscritosAdmin[c.idInscricao] || i.email || '';
+        return normalizar(i.nome || '').includes(q) ||
+          normalizar(email).includes(q) ||
+          normalizar(c.numero || '').includes(q);
+      });
+    }
+
+    const linhas = listaCerts.map(c => {
       const i = inscritosMap.get(c.idInscricao) || { nome: '?', cargo: '', entidade: '', naoEnviar: false };
       const email = ST.inscritosAdmin[c.idInscricao] || '';
       const enviado = !!c.dataEnvioEmail;
@@ -1933,12 +1972,18 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     });
     fi.addEventListener('change', () => { if (fi.files[0]) processarExcel(fi.files[0]); });
 
-    // Pesquisa rápida na aba Inscritos
-    const inputBusca = $('inscritos-busca');
-    if (inputBusca) {
-      inputBusca.addEventListener('input', () => {
-        ST.inscritosBusca = inputBusca.value;
-        renderInscritos();
+    // Pesquisa rápida em todas as abas que tem listas
+    const buscas = [
+      { id: 'inscritos-busca', key: 'inscritosBusca', rerender: renderInscritos },
+      { id: 'presencas-busca', key: 'presencasBusca', rerender: renderPresencas },
+      { id: 'emissao-busca', key: 'emissaoBusca', rerender: renderEmissao },
+      { id: 'envio-busca', key: 'envioBusca', rerender: renderEnvio }
+    ];
+    for (const b of buscas) {
+      const inp = $(b.id);
+      if (inp) inp.addEventListener('input', () => {
+        ST[b.key] = inp.value;
+        b.rerender();
       });
     }
 
