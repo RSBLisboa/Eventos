@@ -497,11 +497,12 @@
             <div id="evt-sig-imagem-vazio" style="color:var(--texto-mute);font-size:13px;flex:1">Sem imagem carregada. O envio de certificados fica bloqueado até carregar a assinatura.</div>
             <img id="evt-sig-imagem-img" alt="" style="display:none;max-height:80px;max-width:200px;background:#fff;border:1px solid var(--linha);padding:4px;border-radius:4px">
             <div style="display:flex;flex-direction:column;gap:6px">
+              <button type="button" id="btn-sig-assinar" class="btn" style="padding:6px 14px;font-size:12px;background:var(--rsb-vermelho);color:#fff;border-color:var(--rsb-vermelho)">Assinar agora</button>
               <button type="button" id="btn-sig-upload" class="btn" style="padding:6px 14px;font-size:12px">Carregar PNG</button>
               <button type="button" id="btn-sig-remover" class="btn" style="padding:6px 14px;font-size:12px;display:none">Remover</button>
             </div>
           </div>
-          <div class="help">PNG com fundo transparente, ~400px largura. Persiste em <code>evento.json</code> (base64). Gate de autorização: sem assinatura carregada, o envio de certificados fica desactivado.</div>
+          <div class="help">Duas opções: <strong>Assinar agora</strong> (com rato, dedo ou caneta táctil no próprio admin) ou <strong>Carregar PNG</strong> (ficheiro pré-feito). PNG ideal: fundo transparente, ~400px largura. Persiste em <code>evento.json</code> e replica para <code>assets/assinatura-comandante.png</code> no repo Certificados. Sem assinatura carregada, o envio de certificados fica desactivado.</div>
         </div>
       </div>
     </div>
@@ -797,6 +798,23 @@
     <div class="actions">
       <button class="btn secondary" id="cf-cancel" style="flex:1">Cancelar</button>
       <button class="btn" id="cf-ok" style="flex:1">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: assinatura por canvas (caneta, rato ou toque) -->
+<div class="modal hide" id="modal-assinatura">
+  <div class="card" style="max-width:680px">
+    <h2>Assinatura do Comandante</h2>
+    <p style="font-size:13px;color:var(--texto-mute);margin-bottom:12px">Assine dentro da área branca com rato, caneta táctil ou dedo. O traço será convertido em PNG transparente.</p>
+    <div id="assinatura-wrap" style="position:relative;background:#fff;border:2px dashed var(--linha);border-radius:8px">
+      <canvas id="assinatura-canvas" style="display:block;width:100%;height:240px;touch-action:none;cursor:crosshair"></canvas>
+      <div id="assinatura-placeholder" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#bbb;font-style:italic;pointer-events:none;font-size:14px">↗ Toque ou clique e arraste para começar a assinar</div>
+    </div>
+    <div class="actions" style="margin-top:16px;gap:8px;display:flex">
+      <button class="btn secondary" id="btn-assinatura-limpar" style="flex:1">Limpar</button>
+      <button class="btn secondary" id="btn-assinatura-cancelar" style="flex:1">Cancelar</button>
+      <button class="btn" id="btn-assinatura-salvar" style="flex:1.4">Guardar assinatura</button>
     </div>
   </div>
 </div>

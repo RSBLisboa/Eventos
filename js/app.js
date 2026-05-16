@@ -1873,6 +1873,117 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     $('btn-sig-upload').addEventListener('click', () => $('evt-sig-imagem-file').click());
     $('evt-sig-imagem-file').addEventListener('change', onAssinaturaUpload);
     $('btn-sig-remover').addEventListener('click', onAssinaturaRemover);
+
+    // Assinar agora (canvas — caneta, rato, dedo)
+    $('btn-sig-assinar').addEventListener('click', sigOpenModal);
+    $('btn-assinatura-limpar').addEventListener('click', sigClearCanvas);
+    $('btn-assinatura-cancelar').addEventListener('click', () => $('modal-assinatura').classList.add('hide'));
+    $('btn-assinatura-salvar').addEventListener('click', sigSaveCanvas);
+  }
+
+  // ── SIGNATURE PAD ─────────────────────────────────────────────────────
+  let _sigCtx = null;
+  let _sigDrawing = false;
+  let _sigDirty = false;
+
+  function sigOpenModal() {
+    $('modal-assinatura').classList.remove('hide');
+    const canvas = $('assinatura-canvas');
+    const wrap = $('assinatura-wrap');
+    // Set canvas resolution to match display * device pixel ratio
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const cssW = wrap.clientWidth;
+    const cssH = 240;
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
+    _sigCtx = canvas.getContext('2d');
+    _sigCtx.scale(dpr, dpr);
+    _sigCtx.strokeStyle = '#111';
+    _sigCtx.lineWidth = 2.2;
+    _sigCtx.lineCap = 'round';
+    _sigCtx.lineJoin = 'round';
+    _sigDirty = false;
+    $('assinatura-placeholder').style.display = 'flex';
+    // Bind once
+    if (!canvas._sigBound) {
+      canvas.addEventListener('mousedown', sigStart);
+      canvas.addEventListener('mousemove', sigDraw);
+      window.addEventListener('mouseup', sigEnd);
+      canvas.addEventListener('mouseleave', sigEnd);
+      canvas.addEventListener('touchstart', sigStart, { passive: false });
+      canvas.addEventListener('touchmove', sigDraw, { passive: false });
+      canvas.addEventListener('touchend', sigEnd);
+      canvas.addEventListener('touchcancel', sigEnd);
+      canvas._sigBound = true;
+    }
+  }
+  function sigGetPos(e) {
+    const canvas = $('assinatura-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const t = e.touches && e.touches[0];
+    const x = (t ? t.clientX : e.clientX) - rect.left;
+    const y = (t ? t.clientY : e.clientY) - rect.top;
+    return { x, y };
+  }
+  function sigStart(e) {
+    e.preventDefault();
+    if (!_sigCtx) return;
+    _sigDrawing = true;
+    const p = sigGetPos(e);
+    _sigCtx.beginPath();
+    _sigCtx.moveTo(p.x, p.y);
+    _sigDirty = true;
+    $('assinatura-placeholder').style.display = 'none';
+  }
+  function sigDraw(e) {
+    if (!_sigDrawing || !_sigCtx) return;
+    e.preventDefault();
+    const p = sigGetPos(e);
+    _sigCtx.lineTo(p.x, p.y);
+    _sigCtx.stroke();
+  }
+  function sigEnd() {
+    if (_sigDrawing) {
+      _sigDrawing = false;
+      if (_sigCtx) _sigCtx.closePath();
+    }
+  }
+  function sigClearCanvas() {
+    if (!_sigCtx) return;
+    const canvas = $('assinatura-canvas');
+    _sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+    _sigDirty = false;
+    $('assinatura-placeholder').style.display = 'flex';
+  }
+  async function sigSaveCanvas() {
+    if (!_sigDirty) { toast('Assina primeiro antes de guardar.', 'err'); return; }
+    const canvas = $('assinatura-canvas');
+    const dataUrl = canvas.toDataURL('image/png');
+    if (!ST.evento) ST.evento = eventoDefault();
+    ST.evento.assinaturaComandantePng = dataUrl;
+    ST.evento.assinaturaCarregadaEm = nowIso();
+    renderAssinaturaPreview(dataUrl);
+    $('modal-assinatura').classList.add('hide');
+    toast('A publicar PNG no repo Certificados…', 'ok');
+    try {
+      const base64 = dataUrl.replace(/^data:image\/[a-z]+;base64,/i, '');
+      let sha = null;
+      try {
+        const cur = await ghLer('assets/assinatura-comandante.png', CONFIG.repoCerts);
+        sha = cur.sha;
+      } catch (_) { /* 404 = primeiro upload */ }
+      await ghEscreverBinario(
+        'assets/assinatura-comandante.png',
+        base64,
+        sha,
+        'asset: assinatura do comandante desenhada via canvas no admin',
+        CONFIG.repoCerts
+      );
+      toast('Assinatura sincronizada. Clica "Guardar configuração" para persistir.', 'ok');
+    } catch (err) {
+      console.error(err);
+      toast('PNG guardado localmente mas falhou publicar: ' + err.message, 'err');
+    }
   }
 
   function renderAssinaturaPreview(dataUrl) {
