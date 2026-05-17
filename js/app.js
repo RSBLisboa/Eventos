@@ -859,14 +859,18 @@
     $('edit-titulo').textContent = 'Editar inscrito';
     $('edit-novo').value = '0';
     $('edit-id').value = i.id;
+    // Meta com ID + Token (readonly, info)
+    const tokenPart = i.token ? ' · Token: ' + i.token : '';
+    $('edit-meta').textContent = 'ID: ' + i.id + tokenPart;
     $('edit-nome').value = i.nome || '';
-    $('edit-email').value = ST.inscritosAdmin[i.id] || '';
+    // Email: prioridade sessão local (recém-importado) > JSON público
+    $('edit-email').value = ST.inscritosAdmin[i.id] || i.email || '';
     $('edit-cargo').value = i.cargo || '';
     $('edit-entidade').value = i.entidade || '';
-    $('edit-categoria').value = i.categoria || '';
     $('edit-estado').value = i.estado || 'Pendente';
-    $('edit-era-conv').value = (i.eraConvidado === 'Não' || i.eraConvidado === 'Nao') ? 'Não' : 'Sim';
+    $('edit-era-conv').value = (i.eraConvidado === 'Não' || i.eraConvidado === 'Nao' || i.eraConvidado === false) ? 'Não' : 'Sim';
     $('edit-nao-enviar').checked = !!i.naoEnviar;
+    $('edit-autoriza').checked = !!i.autorizaContacto;
     $('edit-delete').style.display = '';
     $('modal-edit-inscrito').classList.remove('hide');
     setTimeout(() => $('edit-nome').focus(), 60);
@@ -879,17 +883,19 @@
       const n = parseInt(i.id, 10);
       if (!isNaN(n) && n > maxId) maxId = n;
     }
+    const novoId = maxId + 1;
     $('edit-titulo').textContent = 'Adicionar inscrito';
     $('edit-novo').value = '1';
-    $('edit-id').value = maxId + 1;
+    $('edit-id').value = novoId;
+    $('edit-meta').textContent = 'Novo · ID: ' + novoId + ' · Token gerado no acto da publicação';
     $('edit-nome').value = '';
     $('edit-email').value = '';
     $('edit-cargo').value = '';
     $('edit-entidade').value = '';
-    $('edit-categoria').value = '';
     $('edit-estado').value = 'Confirmada';
-    $('edit-era-conv').value = 'Não';  // auto-inscritos são default em adicionar manual
+    $('edit-era-conv').value = 'Não';
     $('edit-nao-enviar').checked = false;
+    $('edit-autoriza').checked = false;
     $('edit-delete').style.display = 'none';
     $('modal-edit-inscrito').classList.remove('hide');
     setTimeout(() => $('edit-nome').focus(), 60);
@@ -905,12 +911,14 @@
     const nome = $('edit-nome').value.trim();
     if (!nome) { toast('Nome é obrigatório.', 'err'); $('edit-nome').focus(); return; }
 
+    const email = $('edit-email').value.trim();
     const dados = {
       id: id,
       nome: nome,
       cargo: $('edit-cargo').value.trim(),
       entidade: $('edit-entidade').value.trim(),
-      categoria: $('edit-categoria').value.trim(),
+      email: email,                                // publicado em inscritos.json (schema@2)
+      autorizaContacto: $('edit-autoriza').checked,
       estado: $('edit-estado').value,
       eraConvidado: $('edit-era-conv').value,
       naoEnviar: $('edit-nao-enviar').checked
@@ -931,8 +939,7 @@
       ST.inscritos[idx] = Object.assign({}, ST.inscritos[idx], dados);
     }
 
-    // Email vai para sessionStorage (privado)
-    const email = $('edit-email').value.trim();
+    // Email duplica em sessionStorage (cache local, util para .eml com bcc, etc.).
     if (email && !dados.naoEnviar) {
       ST.inscritosAdmin[id] = email;
     } else {
@@ -2048,6 +2055,8 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     // Modal handlers
     $('edit-save').addEventListener('click', salvarEdit);
     $('edit-cancel').addEventListener('click', fecharEditModal);
+    const fecharX = $('edit-fechar-x');
+    if (fecharX) fecharX.addEventListener('click', fecharEditModal);
     $('edit-delete').addEventListener('click', apagarInscrito);
     $('modal-edit-inscrito').addEventListener('click', e => {
       if (e.target.id === 'modal-edit-inscrito') fecharEditModal();

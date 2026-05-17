@@ -678,66 +678,87 @@
 
   <!-- ════════════ MODAL: Editar inscrito ════════════ -->
   <div class="modal hide" id="modal-edit-inscrito">
-    <div class="card" style="max-width:600px">
-      <h2 id="edit-titulo">Editar inscrito</h2>
+    <div class="card" style="max-width:640px">
+      <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:8px">
+        <div style="flex:1">
+          <h2 id="edit-titulo" style="margin:0">Editar inscrito</h2>
+          <div id="edit-meta" style="font-size:11.5px;color:var(--texto-mute);margin-top:4px;font-family:'SF Mono',Consolas,monospace">—</div>
+        </div>
+        <button type="button" id="edit-fechar-x" title="Fechar" style="background:transparent;border:none;font-size:22px;color:var(--texto-mute);cursor:pointer;line-height:1;padding:0 4px">×</button>
+      </div>
       <input type="hidden" id="edit-id">
       <input type="hidden" id="edit-novo">
-      <div class="form-grid">
-        <div class="full">
-          <label>Nome *</label>
-          <input id="edit-nome" placeholder="Nome completo">
+
+      <!-- Secção: Identificação -->
+      <fieldset style="border:1px solid var(--linha);border-radius:8px;padding:12px 14px 6px;margin:14px 0 0">
+        <legend style="font-size:11px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;padding:0 6px">Identificação</legend>
+        <div class="form-grid">
+          <div class="full">
+            <label>Nome completo *</label>
+            <input id="edit-nome" placeholder="Nome e apelidos">
+          </div>
+          <div>
+            <label>Cargo / Posto</label>
+            <input id="edit-cargo" placeholder="Ex: Subchefe de 2.ª Classe">
+          </div>
+          <div>
+            <label>Entidade</label>
+            <input id="edit-entidade" placeholder="Ex: RSB · BV Faro · CML">
+          </div>
         </div>
-        <div class="full">
-          <label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--texto-mute)">(sessão local — não publicado)</span></label>
-          <input id="edit-email" type="email" placeholder="exemplo@dominio.pt · use «; » para múltiplos">
+      </fieldset>
+
+      <!-- Secção: Contacto -->
+      <fieldset style="border:1px solid var(--linha);border-radius:8px;padding:12px 14px 6px;margin:14px 0 0">
+        <legend style="font-size:11px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;padding:0 6px">Contacto</legend>
+        <div class="form-grid">
+          <div class="full">
+            <label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--texto-mute)">— publicado em <code style="font-size:11px">inscritos.json</code></span></label>
+            <input id="edit-email" type="email" placeholder="exemplo@dominio.pt">
+          </div>
+          <div class="full" style="margin-top:4px">
+            <label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500;font-size:13px">
+              <input type="checkbox" id="edit-autoriza" style="width:auto;margin:0">
+              Autoriza contacto para iniciativas RSB
+            </label>
+          </div>
+          <div class="full" style="margin-top:4px">
+            <label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500;font-size:13px">
+              <input type="checkbox" id="edit-nao-enviar" style="width:auto;margin:0">
+              Não enviar mail (flag de exclusão de envio de certificado)
+            </label>
+          </div>
         </div>
-        <div>
-          <label>Cargo</label>
-          <input id="edit-cargo">
+      </fieldset>
+
+      <!-- Secção: Inscrição -->
+      <fieldset style="border:1px solid var(--linha);border-radius:8px;padding:12px 14px 6px;margin:14px 0 0">
+        <legend style="font-size:11px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;padding:0 6px">Inscrição</legend>
+        <div class="form-grid">
+          <div>
+            <label>Estado</label>
+            <select id="edit-estado">
+              <option>Pendente</option>
+              <option>Confirmada</option>
+              <option>Lista de espera</option>
+              <option>Cancelada</option>
+              <option>Recusada</option>
+            </select>
+          </div>
+          <div>
+            <label>Origem</label>
+            <select id="edit-era-conv">
+              <option value="Sim">Convidado · lista original</option>
+              <option value="Não">Auto-inscrito · não estava</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <label>Entidade</label>
-          <input id="edit-entidade">
-        </div>
-        <div>
-          <label>Categoria</label>
-          <input id="edit-categoria" list="categoria-options">
-          <datalist id="categoria-options">
-            <option value="Entidade Pública">
-            <option value="Bombeiros Profissionais">
-            <option value="Bombeiros Voluntários">
-            <option value="Forças Armadas">
-            <option value="Empresa/Indústria">
-            <option value="Universidade/Investigação">
-            <option value="Outro">
-          </datalist>
-        </div>
-        <div>
-          <label>Estado da inscrição</label>
-          <select id="edit-estado">
-            <option>Pendente</option>
-            <option>Confirmada</option>
-            <option>Lista de espera</option>
-            <option>Cancelada</option>
-            <option>Recusada</option>
-          </select>
-        </div>
-        <div>
-          <label>Era convidado?</label>
-          <select id="edit-era-conv">
-            <option value="Sim">Sim · estava na lista original</option>
-            <option value="Não">Não · auto-inscrito</option>
-          </select>
-        </div>
-        <div class="full">
-          <label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500">
-            <input type="checkbox" id="edit-nao-enviar" style="width:auto"> Não enviar mail (flag de exclusão de envio)
-          </label>
-        </div>
-      </div>
-      <div class="actions" style="margin-top:20px">
+      </fieldset>
+
+      <div class="actions" style="margin-top:18px;display:flex;gap:8px;align-items:center">
+        <button class="btn danger" id="edit-delete" title="Apagar este inscrito">🗑 Apagar</button>
+        <span style="flex:1"></span>
         <button class="btn secondary" id="edit-cancel">Cancelar</button>
-        <button class="btn danger" id="edit-delete" style="margin-left:auto">🗑 Apagar</button>
         <button class="btn primary" id="edit-save">Guardar</button>
       </div>
     </div>
