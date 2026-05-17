@@ -774,6 +774,111 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // ARQUIVAR EVENTO + PREPARAR PRÓXIMO
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Cria branch arquivo/<data> em Presencas + Certificados a apontar para o
+  // commit actual de main. Reseta JSONs operacionais para estado limpo e
+  // actualiza evento.json com novo ID/data. inscritos.json fica intacto
+  // (operador importa nova lista depois no tab Inscritos).
+  async function ghGetBranchSha(repo, branch) {
+    const url = `https://api.github.com/repos/${CONFIG.githubOwner}/${repo}/git/ref/heads/${branch}`;
+    const r = await fetch(url, { headers: ghHeaders() });
+    if (!r.ok) throw new Error(`GET ref ${branch}: ${r.status}`);
+    const j = await r.json();
+    return j.object.sha;
+  }
+  async function ghCreateBranch(repo, novoBranch, fromSha) {
+    const url = `https://api.github.com/repos/${CONFIG.githubOwner}/${repo}/git/refs`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: ghHeaders(),
+      body: JSON.stringify({ ref: `refs/heads/${novoBranch}`, sha: fromSha })
+    });
+    if (r.status === 422) {
+      // Branch já existe — sinalizar mas não bloquear (idempotente).
+      return { existed: true };
+    }
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`Criar branch ${novoBranch} em ${repo}: ${r.status} ${t}`);
+    }
+    return { existed: false };
+  }
+
+  async function arquivarEvento() {
+    const novoId = parseInt($('evt-prox-id').value, 10);
+    const novaData = $('evt-prox-data').value;
+    if (!novoId || !novaData) {
+      toast('Preenche ID e data do próximo evento antes de arquivar.', 'err');
+      return;
+    }
+    const eventoActual = ST.evento || {};
+    const dataAct = eventoActual.data || nowIso().slice(0, 10);
+    const branchArquivo = 'arquivo/' + dataAct + '-id' + (eventoActual.id || 0);
+
+    const ok = await confirmar(
+      'Arquivar evento ' + (eventoActual.id || '?'),
+      'Vai criar branch "' + branchArquivo + '" em Presencas e Certificados (snapshot do estado actual), depois resetar presenças/entregas/certificados/apreciação e actualizar evento.json para ID=' + novoId + ', data=' + novaData + '.\n\ninscritos.json fica intacto — importas nova lista no tab Inscritos.\n\nContinuar?'
+    );
+    if (!ok) return;
+
+    setLoading(true, 'A criar branches arquivo…');
+    try {
+      // 1. Snapshot via branch nos 2 repos.
+      const [shaPres, shaCerts] = await Promise.all([
+        ghGetBranchSha(CONFIG.repoData, CONFIG.branch),
+        ghGetBranchSha(CONFIG.repoCerts, CONFIG.branch)
+      ]);
+      const [b1, b2] = await Promise.all([
+        ghCreateBranch(CONFIG.repoData, branchArquivo, shaPres),
+        ghCreateBranch(CONFIG.repoCerts, branchArquivo, shaCerts)
+      ]);
+      const arq = (b1.existed || b2.existed)
+        ? ' (branches já existiam — re-usadas)'
+        : '';
+
+      setLoading(true, 'A resetar JSONs operacionais…');
+      // 2. Reset dos JSONs operacionais. Cada um precisa do sha actual.
+      const resets = [
+        { path: 'data/presencas.json', repo: CONFIG.repoData, payload: { schema: 'presencas@1', eventoId: novoId, actualizadoEm: nowIso(), marcacoes: [] } },
+        { path: 'data/entregas.json', repo: CONFIG.repoData, payload: { schema: 'entregas@1', eventoId: novoId, actualizadoEm: nowIso(), versao: 1, entregas: [] } },
+        { path: 'data/apreciacao.json', repo: CONFIG.repoData, payload: { schema: 'apreciacao@1', eventoId: novoId, actualizadoEm: nowIso(), respostas: [] } },
+        { path: 'data/certificados.json', repo: CONFIG.repoData, payload: { schema: 'certificados@1', eventoId: novoId, actualizadoEm: nowIso(), certificados: [] } }
+      ];
+      for (const r of resets) {
+        try {
+          const cur = await ghLer(r.path, r.repo).catch(() => ({ sha: null }));
+          await ghEscrever(r.path, r.payload, cur.sha,
+            'reset: novo evento id=' + novoId + ' · arquivo em ' + branchArquivo, r.repo);
+        } catch (e) {
+          console.warn('Reset falhou para', r.path, e.message);
+        }
+      }
+
+      // 3. Actualizar evento.json com novo ID + data + programa vazio.
+      setLoading(true, 'A actualizar evento.json…');
+      const novoEvento = JSON.parse(JSON.stringify(eventoActual));
+      novoEvento.id = novoId;
+      novoEvento.data = novaData;
+      novoEvento.programa = [];
+      novoEvento.proxNumeroCert = 1;
+      novoEvento.actualizadoEm = nowIso();
+      // Mantém titulo/local/email/signatário/users — todos editáveis depois.
+      const curEvt = await ghLer('data/evento.json', CONFIG.repoData);
+      await ghEscrever('data/evento.json', novoEvento, curEvt.sha,
+        'novo evento: id=' + novoId + ' data=' + novaData, CONFIG.repoData);
+
+      setLoading(false);
+      toast('Evento arquivado em ' + branchArquivo + arq + '. Recarrega para começar o próximo.', 'ok');
+      // Forçar reload depois de 3s para mostrar o novo estado.
+      setTimeout(() => location.reload(), 3000);
+    } catch (err) {
+      setLoading(false);
+      toast('Erro a arquivar: ' + err.message, 'err');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // INSCRITOS TAB
   // ═══════════════════════════════════════════════════════════════════════════
   // Mapeia estado do Excel para vocabulário canónico (igual ao Access).
@@ -2165,6 +2270,7 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     $('btn-setup-save').addEventListener('click', setupGuardar);
     $('btn-setup-reload').addEventListener('click', setupRecarregar);
     $('btn-revogar-tablets').addEventListener('click', revogarTablets);
+    $('btn-arquivar-evento').addEventListener('click', arquivarEvento);
     $('btn-prog-add').addEventListener('click', () => {
       const actual = lerPrograma();
       actual.push({ hora: '', titulo: '', oradores: '', descricao: '' });
