@@ -546,13 +546,9 @@
 
     const linhas = lugares.map(lugar => {
       const occupied = mapaPorLugar.get(String(lugar));
-      const ehR = String(lugar).toUpperCase().startsWith('R');
-      const bgPill = ehR ? '#fef3c7' : '#f1f5f9';
-      const fgPill = ehR ? '#92400e' : '#1e293b';
-      const borderPill = ehR ? '#fde68a' : '#cbd5e1';
       return `
         <div style="display:grid;grid-template-columns:64px 1fr 32px;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--linha)">
-          <span style="display:inline-block;background:${bgPill};color:${fgPill};font-weight:700;text-align:center;padding:4px 8px;border-radius:6px;border:1px solid ${borderPill};font-size:13px">${escapeHtml(lugar)}</span>
+          <span style="text-align:center">${pillLugarHtml(lugar)}</span>
           <select data-sala-lugar="${escapeHtml(lugar)}" style="padding:6px 10px;font-size:13px;border:1px solid var(--linha);border-radius:6px;font-family:inherit;background:#fff">
             ${opcoes.replace('value="' + (occupied ? occupied.id : '__none__') + '"', 'value="' + (occupied ? occupied.id : '__none__') + '" selected')}
           </select>
@@ -1200,14 +1196,14 @@
           : `<td><span class="small" style="color:var(--erro)">— sem email —</span></td>`;
       }
       const eraConv = i.eraConvidado;
-      const pillEra = eraConv === 'Não' || eraConv === 'Nao'
+      const conv = (eraConv === true || eraConv === 'Sim');
+      const auto = (eraConv === false || eraConv === 'Não' || eraConv === 'Nao');
+      const pillEra = auto
         ? '<span class="pill amarelo" title="Auto-inscrito · não estava na lista original">Auto</span>'
-        : (eraConv === 'Sim' ? '<span class="pill cinza" title="Estava na lista de convidados original">Conv.</span>' : '');
+        : (conv ? '<span class="pill cinza" title="Estava na lista de convidados original">Conv.</span>' : '');
       const flagNaoEnviar = i.naoEnviar ? '<span class="pill amarelo" title="Flag: Não enviar mail">🚫</span>' : '';
       const pillCat = pillCategoria(i.categoria);
-      const pillLugar = i.lugar
-        ? `<span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid #fde68a">${escapeHtml(i.lugar)}</span>`
-        : '<span class="small" style="color:var(--texto-mute)">—</span>';
+      const pillLugar = pillLugarHtml(i.lugar);
       return `<tr class="hover" data-row-id="${i.id}">
         <td><span class="small mono" style="color:var(--texto-mute)">${escapeHtml(String(i.id || ''))}</span></td>
         <td>${escapeHtml(i.nome)} ${flagNaoEnviar}</td>
@@ -1235,6 +1231,17 @@
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table></div>`;
+  }
+
+  // Pill colorida para o lugar (mesma paleta cross-app)
+  function pillLugarHtml(lugar) {
+    if (!lugar) return '<span class="small" style="color:var(--texto-mute)">—</span>';
+    const l = String(lugar);
+    const ehR = l.toUpperCase().startsWith('R');
+    const bg = ehR ? '#fef9c3' : '#f1f5f9';
+    const fg = ehR ? '#854d0e' : '#1e293b';
+    const bd = ehR ? '#facc15' : '#cbd5e1';
+    return '<span style="display:inline-block;background:' + bg + ';color:' + fg + ';font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;border:1px solid ' + bd + '">' + escapeHtml(l) + '</span>';
   }
 
   // Pill colorida para a categoria (mesma paleta do p.html)
