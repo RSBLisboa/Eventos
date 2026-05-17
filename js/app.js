@@ -513,19 +513,32 @@
       lista.innerHTML = '<div class="help" style="padding:14px;border:1px dashed var(--linha);border-radius:6px;text-align:center">Sem slots. Clica "+ Adicionar slot".</div>';
       return;
     }
-    const cellHeader = (t) => `<div style="font-size:11px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">${t}</div>`;
-    const linhas = ['<div style="display:grid;grid-template-columns:80px 1fr 1fr 90px 70px;gap:8px;align-items:center;font-size:13px">'];
-    linhas.push(cellHeader('Hora'));
-    linhas.push(cellHeader('Título'));
-    linhas.push(cellHeader('Orador'));
-    linhas.push(cellHeader('Duração'));
-    linhas.push(cellHeader(''));
+    const linhas = ['<div style="display:flex;flex-direction:column;gap:14px;font-size:13px">'];
+    linhas.push('<div style="font-size:11px;color:var(--texto-mute);font-style:italic;line-height:1.5">Para slot com vários oradores, separar com <code>|</code> (ex: <em>Miguel Moita · Intervir.pt | José Ferreira · ERSBL</em>). Descrição é opcional.</div>');
     slots.forEach((s, i) => {
-      linhas.push(`<input type="time" id="prog-hora-${i}" value="${escapeHtml(s.hora || '')}" style="padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px">`);
-      linhas.push(`<input type="text" id="prog-titulo-${i}" value="${escapeHtml(s.titulo || '')}" placeholder="Título do slot" style="padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px">`);
-      linhas.push(`<input type="text" id="prog-orador-${i}" value="${escapeHtml(s.orador || '')}" placeholder="Orador (opcional)" style="padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px">`);
-      linhas.push(`<input type="text" id="prog-dur-${i}" value="${escapeHtml(s.duracao || '')}" placeholder="ex: 30 min" style="padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px">`);
-      linhas.push(`<button class="btn secondary" data-prog-del="${i}" style="padding:7px 10px;font-size:12px">Remover</button>`);
+      linhas.push(`
+        <div style="display:grid;grid-template-columns:100px 1fr 90px;gap:8px;padding:12px;border:1px solid var(--linha);border-radius:8px;background:#fafafa">
+          <div>
+            <label style="font-size:10.5px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.04em;font-weight:600">Hora</label>
+            <input type="time" id="prog-hora-${i}" value="${escapeHtml(s.hora || '')}" style="width:100%;padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px;margin-top:3px">
+          </div>
+          <div>
+            <label style="font-size:10.5px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.04em;font-weight:600">Título da temática</label>
+            <input type="text" id="prog-titulo-${i}" value="${escapeHtml(s.titulo || '')}" placeholder="Ex: Painéis Temáticos" style="width:100%;padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px;margin-top:3px">
+          </div>
+          <div style="display:flex;align-items:flex-end">
+            <button class="btn secondary" data-prog-del="${i}" style="padding:7px 12px;font-size:12px;width:100%">Remover</button>
+          </div>
+          <div style="grid-column:1 / span 3">
+            <label style="font-size:10.5px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.04em;font-weight:600">Orador(es)</label>
+            <input type="text" id="prog-oradores-${i}" value="${escapeHtml(s.oradores || s.orador || '')}" placeholder="Nome · Entidade  (separar oradores múltiplos com |)" style="width:100%;padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px;margin-top:3px">
+          </div>
+          <div style="grid-column:1 / span 3">
+            <label style="font-size:10.5px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.04em;font-weight:600">Descrição (opcional)</label>
+            <textarea id="prog-descricao-${i}" rows="2" placeholder="Resumo do slot, moderação, observações…" style="width:100%;padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px;margin-top:3px;resize:vertical">${escapeHtml(s.descricao || '')}</textarea>
+          </div>
+        </div>
+      `);
     });
     linhas.push('</div>');
     lista.innerHTML = linhas.join('');
@@ -539,9 +552,9 @@
     while ($('prog-hora-' + i)) {
       const hora = $('prog-hora-' + i).value.trim();
       const titulo = $('prog-titulo-' + i).value.trim();
-      const orador = $('prog-orador-' + i).value.trim();
-      const duracao = $('prog-dur-' + i).value.trim();
-      if (hora || titulo) out.push({ hora, titulo, orador, duracao });
+      const oradores = $('prog-oradores-' + i) ? $('prog-oradores-' + i).value.trim() : '';
+      const descricao = $('prog-descricao-' + i) ? $('prog-descricao-' + i).value.trim() : '';
+      if (hora || titulo) out.push({ hora, titulo, oradores, descricao });
       i++;
     }
     out.sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
@@ -2103,7 +2116,7 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     $('btn-revogar-tablets').addEventListener('click', revogarTablets);
     $('btn-prog-add').addEventListener('click', () => {
       const actual = lerPrograma();
-      actual.push({ hora: '', titulo: '', orador: '', duracao: '' });
+      actual.push({ hora: '', titulo: '', oradores: '', descricao: '' });
       if (!ST.evento) ST.evento = {};
       ST.evento.programa = actual;
       renderPrograma();
