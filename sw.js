@@ -8,7 +8,7 @@
 //
 // Bump CACHE_VERSION ao alterar o app shell.
 
-const CACHE_VERSION = 'rsb-eventos-v10-brasao-rsb';
+const CACHE_VERSION = 'rsb-eventos-v11-brasao-oficial';
 
 const SHELL = [
   './',
