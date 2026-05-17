@@ -189,6 +189,92 @@
     box-shadow: 0 0 0 3px var(--rsb-vermelho-claro);
   }
   textarea { resize: vertical; min-height: 80px; font-family: inherit; }
+
+  /* ── Estilo clean dos inputs no modal Editar Inscrito ── */
+  #modal-edit-inscrito .card {
+    max-width: 640px;
+    padding: 24px 26px 22px;
+  }
+  #modal-edit-inscrito fieldset {
+    border: none;
+    background: #fafafa;
+    border-radius: 10px;
+    padding: 14px 16px 8px !important;
+    margin: 0 0 14px !important;
+  }
+  #modal-edit-inscrito fieldset:last-of-type { margin-bottom: 0 !important; }
+  #modal-edit-inscrito legend {
+    font-size: 10.5px !important;
+    color: var(--texto-mute) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em !important;
+    font-weight: 600 !important;
+    padding: 0 8px;
+    background: #fafafa;
+    border-radius: 4px;
+  }
+  #modal-edit-inscrito label {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--texto-mute);
+    margin-bottom: 5px;
+  }
+  #modal-edit-inscrito input[type=text],
+  #modal-edit-inscrito input[type=email],
+  #modal-edit-inscrito input[type=password],
+  #modal-edit-inscrito select {
+    background: #fff;
+    border: 1px solid transparent;
+    border-bottom: 1px solid var(--linha);
+    border-radius: 6px;
+    padding: 11px 13px;
+    font-size: 14.5px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #modal-edit-inscrito input[type=text]:hover,
+  #modal-edit-inscrito input[type=email]:hover,
+  #modal-edit-inscrito input[type=password]:hover,
+  #modal-edit-inscrito select:hover {
+    border-color: #c4c4c4;
+  }
+  #modal-edit-inscrito input[type=text]:focus,
+  #modal-edit-inscrito input[type=email]:focus,
+  #modal-edit-inscrito input[type=password]:focus,
+  #modal-edit-inscrito select:focus {
+    background: #fff;
+    border-color: var(--rsb-vermelho);
+    box-shadow: 0 0 0 3px var(--rsb-vermelho-claro);
+  }
+  #modal-edit-inscrito .form-grid { gap: 14px 18px; }
+  #modal-edit-inscrito .form-grid > div { margin: 0; }
+  #modal-edit-inscrito h2 { margin: 0; letter-spacing: 0.06em; }
+  #modal-edit-inscrito #edit-meta {
+    background: var(--rsb-vermelho-claro);
+    color: var(--rsb-vermelho-escuro);
+    padding: 5px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    font-size: 11px;
+    margin-top: 8px;
+    font-weight: 600;
+  }
+  /* Checkbox row mais respirável */
+  #modal-edit-inscrito label[for=edit-autoriza],
+  #modal-edit-inscrito label[for=edit-nao-enviar] {
+    background: #fff;
+    border: 1px solid var(--linha);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 0 !important;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  #modal-edit-inscrito label[for=edit-autoriza]:hover,
+  #modal-edit-inscrito label[for=edit-nao-enviar]:hover {
+    background: #f5f5f5;
+  }
   .help {
     font-size: 11.5px;
     color: var(--texto-mute);
@@ -717,15 +803,15 @@
             <input id="edit-email" type="email" placeholder="exemplo@dominio.pt">
           </div>
           <div class="full" style="margin-top:4px">
-            <label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500;font-size:13px">
-              <input type="checkbox" id="edit-autoriza" style="width:auto;margin:0">
-              Autoriza contacto para iniciativas RSB
+            <label for="edit-autoriza" style="display:flex;gap:10px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500;font-size:13px;color:var(--texto)">
+              <input type="checkbox" id="edit-autoriza" style="width:auto;margin:0;flex-shrink:0">
+              <span>Autoriza contacto para iniciativas RSB</span>
             </label>
           </div>
-          <div class="full" style="margin-top:4px">
-            <label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500;font-size:13px">
-              <input type="checkbox" id="edit-nao-enviar" style="width:auto;margin:0">
-              Não enviar mail (flag de exclusão de envio de certificado)
+          <div class="full">
+            <label for="edit-nao-enviar" style="display:flex;gap:10px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500;font-size:13px;color:var(--texto)">
+              <input type="checkbox" id="edit-nao-enviar" style="width:auto;margin:0;flex-shrink:0">
+              <span>Não enviar mail (flag de exclusão de envio de certificado)</span>
             </label>
           </div>
         </div>
