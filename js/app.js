@@ -1055,6 +1055,10 @@
         lista = lista.filter(i => (i.categoria || '') === filtroCat);
       }
     }
+    const filtroLug = ST.filtroLugar || '';
+    if (filtroLug === '__com__') lista = lista.filter(i => !!i.lugar);
+    else if (filtroLug === '__sem__') lista = lista.filter(i => !i.lugar);
+    else if (filtroLug === '__r__') lista = lista.filter(i => String(i.lugar || '').startsWith('R'));
 
     // Preview do Excel (em sessão)
     if (ST.inscritos.length > 0) {
@@ -1100,12 +1104,16 @@
         : (eraConv === 'Sim' ? '<span class="pill cinza" title="Estava na lista de convidados original">Conv.</span>' : '');
       const flagNaoEnviar = i.naoEnviar ? '<span class="pill amarelo" title="Flag: Não enviar mail">🚫</span>' : '';
       const pillCat = pillCategoria(i.categoria);
+      const pillLugar = i.lugar
+        ? `<span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid #fde68a">${escapeHtml(i.lugar)}</span>`
+        : '<span class="small" style="color:var(--texto-mute)">—</span>';
       return `<tr class="hover" data-row-id="${i.id}">
         <td><span class="small mono" style="color:var(--texto-mute)">${escapeHtml(String(i.id || ''))}</span></td>
         <td>${escapeHtml(i.nome)} ${flagNaoEnviar}</td>
         <td><span class="small">${escapeHtml(i.cargo || '—')}</span></td>
         <td><span class="small">${escapeHtml(i.entidade || '—')}</span></td>
         ${colEmail}
+        <td>${pillLugar}</td>
         <td>${pillCat}</td>
         <td><span class="estado-pill-click" data-id="${i.id}" style="cursor:pointer" title="Click para ciclar estado">${pillEstado(i.estado)}</span></td>
         <td>${pillEra}</td>
@@ -1118,6 +1126,7 @@
           <th style="width:50px">ID</th>
           <th>Nome</th><th>Cargo</th><th>Entidade</th>
           ${comEmail ? '<th>Email (sessão)</th>' : ''}
+          <th style="width:70px">Lugar</th>
           <th style="width:130px">Categoria</th>
           <th style="width:120px">Estado</th>
           <th style="width:70px">Origem</th>
@@ -1185,6 +1194,7 @@
     $('edit-estado').value = i.estado || 'Pendente';
     $('edit-era-conv').value = (i.eraConvidado === 'Não' || i.eraConvidado === 'Nao' || i.eraConvidado === false) ? 'Não' : 'Sim';
     $('edit-categoria').value = i.categoria || '';
+    $('edit-lugar').value = i.lugar || '';
     $('edit-nao-enviar').checked = !!i.naoEnviar;
     $('edit-autoriza').checked = !!i.autorizaContacto;
     $('edit-delete').style.display = '';
@@ -1211,6 +1221,7 @@
     $('edit-estado').value = 'Confirmada';
     $('edit-era-conv').value = 'Não';
     $('edit-categoria').value = '';
+    $('edit-lugar').value = '';
     $('edit-nao-enviar').checked = false;
     $('edit-autoriza').checked = false;
     $('edit-delete').style.display = 'none';
@@ -1239,6 +1250,7 @@
       estado: $('edit-estado').value,
       eraConvidado: $('edit-era-conv').value,
       categoria: $('edit-categoria').value,         // manual: sobrepõe-se à detecção automática
+      lugar: $('edit-lugar').value.trim(),          // ex: "12", "R3", "40+41"
       naoEnviar: $('edit-nao-enviar').checked
     };
 
@@ -2350,6 +2362,13 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     if (filtroCat) {
       filtroCat.addEventListener('change', () => {
         ST.filtroCategoria = filtroCat.value;
+        renderInscritos();
+      });
+    }
+    const filtroLugar = $('inscritos-filtro-lugar');
+    if (filtroLugar) {
+      filtroLugar.addEventListener('change', () => {
+        ST.filtroLugar = filtroLugar.value;
         renderInscritos();
       });
     }

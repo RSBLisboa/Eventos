@@ -810,6 +810,12 @@
           <option value="Imprensa">Imprensa</option>
           <option value="__participante__">Sem categoria (participantes)</option>
         </select>
+        <select id="inscritos-filtro-lugar" style="padding:10px 14px;font-size:13px;border:1px solid var(--linha);border-radius:8px;background:#fafafa;font-family:inherit;cursor:pointer">
+          <option value="">Todos os lugares</option>
+          <option value="__com__">Com lugar reservado</option>
+          <option value="__sem__">Sem lugar</option>
+          <option value="__r__">Só lugares R (VIP)</option>
+        </select>
       </div>
 
       <div id="inscritos-preview" class="hide" style="margin-top:16px"></div>
@@ -909,6 +915,10 @@
               <option value="Sim">Convidado · lista original</option>
               <option value="Não">Auto-inscrito · não estava</option>
             </select>
+          </div>
+          <div>
+            <label>Lugar reservado <span style="color:var(--texto-mute);font-weight:400">(opcional)</span></label>
+            <input id="edit-lugar" placeholder="Ex: 12, R3, 40+41">
           </div>
           <div class="full">
             <label>Categoria <span style="color:var(--texto-mute);font-weight:400">(opcional · sobrepõe-se à detecção automática)</span></label>
