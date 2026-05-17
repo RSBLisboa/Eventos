@@ -650,15 +650,16 @@
         <span class="small" style="margin-left:8px;color:var(--texto-mute)">Clica numa linha para editar · clica no pill de estado para ciclar</span>
       </div>
 
+      <div style="margin:14px 0 8px">
+        <input type="search" id="inscritos-busca" placeholder="Pesquisar nome, cargo, entidade, email, token, ID…" autocomplete="off" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid var(--linha);border-radius:8px;background:#fafafa;font-family:inherit">
+      </div>
+
       <div id="inscritos-preview" class="hide" style="margin-top:16px"></div>
     </div>
 
     <div class="panel">
       <h2>Lista pública</h2>
       <p class="lead">Estado actual de <code>data/inscritos.json</code> no GitHub. Schema <code>inscritos@2</code> inclui <code>token</code>, <code>email</code> e <code>autorizaContacto</code>.</p>
-      <div style="margin:10px 0 12px">
-        <input type="search" id="inscritos-busca" placeholder="Pesquisar nome, cargo, entidade, email, token…" autocomplete="off" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid var(--linha);border-radius:8px;background:#fafafa;font-family:inherit">
-      </div>
       <div id="inscritos-publica"></div>
       <div id="inscritos-unsaved" class="alert warn hide" style="margin-top:10px">
         ⚠️ Existem alterações não publicadas. Clica "Publicar inscritos.json" para enviar para o GitHub.
