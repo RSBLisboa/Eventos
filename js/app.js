@@ -501,6 +501,51 @@
     $('evt-bridge-secret').value = getBridgeSecret();
     $('evt-bridge-from').value = e.bridgeFrom || '';
     renderUsersGrid();
+    renderPrograma();
+  }
+
+  function renderPrograma() {
+    const lista = $('programa-lista');
+    if (!lista) return;
+    const e = ST.evento || {};
+    const slots = Array.isArray(e.programa) ? e.programa : [];
+    if (!slots.length) {
+      lista.innerHTML = '<div class="help" style="padding:14px;border:1px dashed var(--linha);border-radius:6px;text-align:center">Sem slots. Clica "+ Adicionar slot".</div>';
+      return;
+    }
+    const cellHeader = (t) => `<div style="font-size:11px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">${t}</div>`;
+    const linhas = ['<div style="display:grid;grid-template-columns:80px 1fr 1fr 90px 70px;gap:8px;align-items:center;font-size:13px">'];
+    linhas.push(cellHeader('Hora'));
+    linhas.push(cellHeader('Título'));
+    linhas.push(cellHeader('Orador'));
+    linhas.push(cellHeader('Duração'));
+    linhas.push(cellHeader(''));
+    slots.forEach((s, i) => {
+      linhas.push(`<input type="time" id="prog-hora-${i}" value="${escapeHtml(s.hora || '')}" style="padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px">`);
+      linhas.push(`<input type="text" id="prog-titulo-${i}" value="${escapeHtml(s.titulo || '')}" placeholder="Título do slot" style="padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px">`);
+      linhas.push(`<input type="text" id="prog-orador-${i}" value="${escapeHtml(s.orador || '')}" placeholder="Orador (opcional)" style="padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px">`);
+      linhas.push(`<input type="text" id="prog-dur-${i}" value="${escapeHtml(s.duracao || '')}" placeholder="ex: 30 min" style="padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px">`);
+      linhas.push(`<button class="btn secondary" data-prog-del="${i}" style="padding:7px 10px;font-size:12px">Remover</button>`);
+    });
+    linhas.push('</div>');
+    lista.innerHTML = linhas.join('');
+  }
+
+  function lerPrograma() {
+    const lista = $('programa-lista');
+    if (!lista) return [];
+    const out = [];
+    let i = 0;
+    while ($('prog-hora-' + i)) {
+      const hora = $('prog-hora-' + i).value.trim();
+      const titulo = $('prog-titulo-' + i).value.trim();
+      const orador = $('prog-orador-' + i).value.trim();
+      const duracao = $('prog-dur-' + i).value.trim();
+      if (hora || titulo) out.push({ hora, titulo, orador, duracao });
+      i++;
+    }
+    out.sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+    return out;
   }
 
   function renderUsersGrid() {
@@ -554,6 +599,7 @@
     e.bridgeUrl = $('evt-bridge-url').value.trim();
     e.bridgeFrom = $('evt-bridge-from').value.trim();
     setBridgeSecret($('evt-bridge-secret').value.trim());
+    e.programa = lerPrograma();
     e.actualizadoEm = nowIso();
     return e;
   }
@@ -2055,6 +2101,23 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     $('btn-setup-save').addEventListener('click', setupGuardar);
     $('btn-setup-reload').addEventListener('click', setupRecarregar);
     $('btn-revogar-tablets').addEventListener('click', revogarTablets);
+    $('btn-prog-add').addEventListener('click', () => {
+      const actual = lerPrograma();
+      actual.push({ hora: '', titulo: '', orador: '', duracao: '' });
+      if (!ST.evento) ST.evento = {};
+      ST.evento.programa = actual;
+      renderPrograma();
+    });
+    $('programa-lista').addEventListener('click', e => {
+      const btn = e.target.closest('button[data-prog-del]');
+      if (!btn) return;
+      const idx = parseInt(btn.dataset.progDel, 10);
+      const actual = lerPrograma();
+      actual.splice(idx, 1);
+      if (!ST.evento) ST.evento = {};
+      ST.evento.programa = actual;
+      renderPrograma();
+    });
 
     // File drop
     const fd = $('filedrop');

@@ -657,6 +657,15 @@
     </div>
 
     <div class="panel">
+      <h2>Programa do evento</h2>
+      <p class="lead">Agenda científica do evento. Visível para participantes (página do certificado) e para o staff (menu do tablet). Pode ser alterada em tempo real — basta clicar <em>Guardar configuração</em> no fim. As alterações aparecem nos tablets no próximo poll.</p>
+      <div id="programa-lista" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div class="actions" style="margin-top:14px">
+        <button class="btn secondary" id="btn-prog-add">+ Adicionar slot</button>
+      </div>
+    </div>
+
+    <div class="panel">
       <h2>Segurança dos tablets</h2>
       <p class="lead">Em caso de tablet perdido / roubado / fim do evento, esta acção desautoriza <strong>todos</strong> os tablets ao mesmo tempo. Cada tablet, no próximo poll, faz logout e volta ao ecrã de password. Não revoga o PAT em si — quem tiver acesso ao código continua a ter — mas força reconfiguração imediata. Para revogar o PAT é preciso rodá-lo no GitHub e regenerar o cifrado.</p>
       <div class="alert warn" style="margin-bottom:14px" id="auth-status">A carregar versão actual…</div>
