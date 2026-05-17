@@ -32,13 +32,13 @@
     baseUrlCerts:  'https://rsblisboa.github.io/Certificados/',
     urlTablet:     'https://rsblisboa.github.io/Presencas/',
 
-    // Hash SHA-256 hex da password admin (RSBL18Mai2026).
+    // Hash SHA-256 hex da password admin (RSBL18MAI2026!).
     // Unificada com Presencas SPA. Para mudar, ver tools/cifrar-pat.html.
-    pinHash: 'ddf8f268f1f55f479bca66b18836d46c2c10f99317ec7814edc58371a93d4536',
+    pinHash: '3e9acaea400236b765076b342af311910d7b19730d85d541c3276db3ec41f9b5',
 
     // PAT cifrado com a password admin (PBKDF2 150k + AES-GCM, base64 de salt|iv|ct).
     // Gerar com tools/cifrar-pat.html neste repo.
-    patCifrado: '',
+    patCifrado: 'DknFWCRvCUDKncniIpJuB0yem1+lklo48JTgckFwkgo7aYrVptaG1OKPLU2MKMcxDaInhfVrXZlCCp+BPYR/dI7yrrRmZRikENfOBrqB8drkqFsd+CTiMfyFJEaNCXma9kBVK8g4O7YTjowyqKsp7jFyOkxYpBuPsBdTs5kxw+bCCOlZe8kpwrk=',
 
     // Polling do estado de presenças (só na tab activa).
     presencasPollMs: 30000
