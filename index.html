@@ -651,8 +651,17 @@
       <p class="lead">Cada operador no balcão / porta / p.html faz login com Utilizador + Palavra-passe. As palavras-passe são guardadas como hash SHA-256 em <code>evento.json</code> — o texto original nunca é gravado. Deixar campos vazios para desactivar um slot.</p>
       <div id="users-grid" style="display:grid;grid-template-columns:30px 1fr 1fr 90px;gap:8px;align-items:center;font-size:13px"></div>
       <div class="help" style="margin-top:10px">
-        Operadores escolhem o nome no dropdown no tablet e introduzem só a sua palavra-passe — não vêem o PAT do GitHub.
-        O PAT é configurado uma vez por tablet em <em>Configurar tablet</em> dentro de cada app, e fica gravado em localStorage.
+        Operadores escolhem o nome no dropdown no tablet e introduzem só a sua palavra-passe.
+        Cada tablet é autorizado uma vez introduzindo a <strong>password admin</strong> em <em>Configurar tablet</em> — o PAT do GitHub é decifrado em segundos e fica gravado localmente.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Segurança dos tablets</h2>
+      <p class="lead">Em caso de tablet perdido / roubado / fim do evento, esta acção desautoriza <strong>todos</strong> os tablets ao mesmo tempo. Cada tablet, no próximo poll, faz logout e volta ao ecrã de password. Não revoga o PAT em si — quem tiver acesso ao código continua a ter — mas força reconfiguração imediata. Para revogar o PAT é preciso rodá-lo no GitHub e regenerar o cifrado.</p>
+      <div class="alert warn" style="margin-bottom:14px" id="auth-status">A carregar versão actual…</div>
+      <div class="actions">
+        <button class="btn" id="btn-revogar-tablets">Desautorizar todos os tablets</button>
       </div>
     </div>
 
@@ -929,12 +938,10 @@
 <div class="modal" id="modal-login">
   <div class="card">
     <h2>Acesso ao admin</h2>
-    <p>PIN da equipa + token GitHub fine-grained com <code>contents:write</code> nos repos <code>Presencas</code> e <code>Certificados</code>. O token só persiste nesta sessão.</p>
-    <label>PIN</label>
-    <input type="password" id="in-pin" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off">
-    <div style="height:10px"></div>
-    <label>Token GitHub</label>
-    <input type="password" id="in-token" autocomplete="off" placeholder="github_pat_…">
+    <p>Introduz a <strong>password admin</strong>. O token GitHub é descodificado em segundos a partir do PAT cifrado embutido no código.</p>
+    <label>Password admin</label>
+    <input type="password" id="in-pin" autocomplete="current-password">
+    <input type="hidden" id="in-token">
     <div class="alert erro hide" id="login-erro"></div>
     <div class="actions">
       <button class="btn" id="btn-login" style="flex:1">Entrar</button>

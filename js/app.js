@@ -32,13 +32,33 @@
     baseUrlCerts:  'https://rsblisboa.github.io/Certificados/',
     urlTablet:     'https://rsblisboa.github.io/Presencas/',
 
-    // Hash SHA-256 hex do PIN. PIN actual gerado em Mai/2026: 309057.
-    // Para mudar, gerar novo hash com snippet em DEPLOY.md > Passo 4.
-    pinHash: '8b9423d1ff0c597462594af22b8f9aca3ae427e307c4c954a6a7e214e0a56394',
+    // Hash SHA-256 hex da password admin (RSBL18Mai2026).
+    // Unificada com Presencas SPA. Para mudar, ver tools/cifrar-pat.html.
+    pinHash: 'ddf8f268f1f55f479bca66b18836d46c2c10f99317ec7814edc58371a93d4536',
+
+    // PAT cifrado com a password admin (PBKDF2 150k + AES-GCM, base64 de salt|iv|ct).
+    // Gerar com tools/cifrar-pat.html neste repo.
+    patCifrado: '',
 
     // Polling do estado de presenças (só na tab activa).
     presencasPollMs: 30000
   };
+
+  // Decifra o PAT embutido com a password admin.
+  async function decifrarPATComPassword(password) {
+    if (!CONFIG.patCifrado) throw new Error('PAT cifrado não configurado.');
+    const bundle = Uint8Array.from(atob(CONFIG.patCifrado), c => c.charCodeAt(0));
+    const salt = bundle.slice(0, 16);
+    const iv = bundle.slice(16, 28);
+    const ct = bundle.slice(28);
+    const baseKey = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' },
+      baseKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return new TextDecoder().decode(pt);
+  }
 
   const TEMPLATE_EMAIL_DEFAULT = `<!DOCTYPE html><html><body style="font-family:Segoe UI,Calibri,sans-serif;color:#1a1a1a;line-height:1.6;max-width:600px;margin:auto;padding:24px">
 <p style="background:#E30613;color:#fff;padding:12px 16px;margin:0 0 24px;font-weight:bold;letter-spacing:.04em;text-transform:uppercase">Regimento de Sapadores Bombeiros de Lisboa</p>
@@ -287,19 +307,26 @@
   // LOGIN
   // ═══════════════════════════════════════════════════════════════════════════
   async function tentarLogin() {
-    const pin = $('in-pin').value.trim();
-    const token = $('in-token').value.trim();
+    const pass = $('in-pin').value;
     const erro = $('login-erro');
     erro.classList.add('hide');
 
-    if (!pin || !token) {
-      erro.textContent = 'Preenche PIN e token.';
+    if (!pass) {
+      erro.textContent = 'Introduz a password admin.';
       erro.classList.remove('hide');
       return;
     }
-    const hash = await sha256Hex(pin);
+    const hash = await sha256Hex(pass);
     if (hash !== CONFIG.pinHash) {
-      erro.textContent = 'PIN incorrecto.';
+      erro.textContent = 'Password incorrecta.';
+      erro.classList.remove('hide');
+      return;
+    }
+    let token;
+    try {
+      token = await decifrarPATComPassword(pass);
+    } catch (e) {
+      erro.textContent = 'Falha a decifrar o PAT — código desactualizado?';
       erro.classList.remove('hide');
       return;
     }
@@ -308,7 +335,7 @@
       await ghValidarToken();
     } catch (e) {
       sessionStorage.removeItem('gh_token');
-      erro.textContent = e.message;
+      erro.textContent = 'PAT cifrado inválido ou expirou: ' + e.message;
       erro.classList.remove('hide');
       return;
     }
@@ -369,6 +396,7 @@
       renderEmissao();
       renderEnvio();
       atualizarBadges();
+      mostrarAuthStatus();
 
       $('evt-titulo-h').textContent = ST.evento.titulo || 'RSB Lisboa';
       $('link-tablet').href = CONFIG.urlTablet;
@@ -584,6 +612,51 @@
       $('evt-titulo-h').textContent = ST.evento.titulo || 'RSB Lisboa';
       toast('Recarregado.', 'ok');
       setLoading(false);
+    } catch (err) {
+      setLoading(false);
+      toast('Erro: ' + err.message, 'err');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // KILL SWITCH — desautoriza todos os tablets de uma vez
+  // ═══════════════════════════════════════════════════════════════════════════
+  async function mostrarAuthStatus() {
+    const el = $('auth-status');
+    if (!el) return;
+    try {
+      const { payload } = await ghLer('data/auth.json', CONFIG.repoData);
+      const v = payload && payload.authVersao;
+      const dt = payload && payload.actualizadoEm;
+      el.innerHTML = '🔐 Versão actual: <strong>' + (v || '?') + '</strong>' +
+        (dt ? ' · actualizada em ' + escapeHtml(dt) : '');
+    } catch (_) {
+      el.textContent = 'Não foi possível ler data/auth.json no repo Presencas.';
+    }
+  }
+
+  async function revogarTablets() {
+    const ok = await confirmar(
+      'Desautorizar tablets',
+      'Esta acção força logout em todos os tablets configurados. Cada operador terá de reintroduzir a password admin no próximo acesso. Continuar?'
+    );
+    if (!ok) return;
+    setLoading(true, 'A desautorizar tablets…');
+    try {
+      const { sha, payload } = await ghLer('data/auth.json', CONFIG.repoData)
+        .catch(() => ({ sha: null, payload: null }));
+      const versaoActual = (payload && parseInt(payload.authVersao, 10)) || 0;
+      const novoPayload = {
+        schema: 'auth@1',
+        authVersao: versaoActual + 1,
+        actualizadoEm: nowIso()
+      };
+      await ghEscrever('data/auth.json', novoPayload, sha,
+        'revoke: desautorizar tablets · v' + (versaoActual + 1),
+        CONFIG.repoData);
+      setLoading(false);
+      toast('Tablets desautorizados · versão ' + (versaoActual + 1), 'ok');
+      mostrarAuthStatus();
     } catch (err) {
       setLoading(false);
       toast('Erro: ' + err.message, 'err');
@@ -1977,11 +2050,11 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     });
 
     $('btn-login').addEventListener('click', tentarLogin);
-    $('in-pin').addEventListener('keydown', e => { if (e.key === 'Enter') $('in-token').focus(); });
-    $('in-token').addEventListener('keydown', e => { if (e.key === 'Enter') tentarLogin(); });
+    $('in-pin').addEventListener('keydown', e => { if (e.key === 'Enter') tentarLogin(); });
 
     $('btn-setup-save').addEventListener('click', setupGuardar);
     $('btn-setup-reload').addEventListener('click', setupRecarregar);
+    $('btn-revogar-tablets').addEventListener('click', revogarTablets);
 
     // File drop
     const fd = $('filedrop');

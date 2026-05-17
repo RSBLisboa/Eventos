@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cifrar PAT · RSB Eventos</title>
+<style>
+  :root {
+    --rsb-vermelho: #c8102e; --texto: #1a1a1a; --texto-mute: #6b7280;
+    --linha: #e5e7eb; --fundo: #f9fafb; --verde: #059669; --erro: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, sans-serif; background: var(--fundo);
+    color: var(--texto); margin: 0; padding: 24px; line-height: 1.5; }
+  .card { max-width: 680px; margin: 0 auto; background: white; border: 1px solid var(--linha);
+    border-radius: 12px; padding: 28px; }
+  h1 { margin: 0 0 4px; font-size: 20px; color: var(--rsb-vermelho); }
+  .lead { color: var(--texto-mute); font-size: 13.5px; margin: 0 0 24px; }
+  label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--texto-mute); margin: 16px 0 6px; font-weight: 600; }
+  input, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--linha);
+    border-radius: 6px; font-size: 13.5px; font-family: 'SF Mono', Consolas, monospace; }
+  input:focus, textarea:focus { outline: none; border-color: var(--rsb-vermelho); }
+  textarea { min-height: 100px; resize: vertical; word-break: break-all; }
+  .btn { background: var(--rsb-vermelho); color: white; border: 0; padding: 11px 20px;
+    border-radius: 6px; font-size: 13.5px; font-weight: 600; cursor: pointer; margin-top: 18px; }
+  .btn:hover { background: #a50e26; }
+  .btn.secundario { background: #6b7280; }
+  .out { margin-top: 20px; padding: 14px; background: var(--fundo); border-radius: 6px;
+    font-size: 12.5px; }
+  .out.ok { background: #ecfdf5; color: var(--verde); border: 1px solid #a7f3d0; }
+  .out.err { background: #fef2f2; color: var(--erro); border: 1px solid #fecaca; }
+  .copy-row { display: flex; gap: 8px; margin-top: 8px; }
+  .copy-row textarea { flex: 1; min-height: 80px; background: white; }
+  ol { padding-left: 22px; font-size: 13px; color: var(--texto-mute); margin: 8px 0; }
+  ol li { margin: 4px 0; }
+  code { background: var(--fundo); padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+  .warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 10px 12px;
+    border-radius: 6px; font-size: 12.5px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Cifrar PAT · RSB Eventos</h1>
+  <p class="lead">Esta página corre 100% no browser. Nada é enviado para nenhum servidor.
+    O PAT cifrado pode ser colado no código-fonte das apps (SPA Presencas e Eventos).</p>
+
+  <div class="warn">
+    <strong>Como usar:</strong>
+    <ol>
+      <li>Cola o PAT do GitHub no campo abaixo.</li>
+      <li>Introduz a <strong>password admin</strong> (a mesma que se usa para autorizar acções no admin).</li>
+      <li>Clica <em>Cifrar</em>.</li>
+      <li>Copia a string de saída e cola no código nas duas apps (constante <code>PAT_CIFRADO</code>).</li>
+      <li>Faz commit + push. Pronto.</li>
+    </ol>
+  </div>
+
+  <label>PAT do GitHub</label>
+  <input type="password" id="pat" placeholder="ghp_… ou github_pat_…" autocomplete="off">
+
+  <label>Password admin (a usada para autorizar acções)</label>
+  <input type="password" id="pass" placeholder="Password admin" autocomplete="off">
+
+  <button class="btn" id="btn-cifrar">Cifrar</button>
+  <button class="btn secundario" id="btn-decifrar">Testar decifragem</button>
+
+  <div id="out"></div>
+</div>
+
+<script>
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const b64 = arr => btoa(String.fromCharCode(...new Uint8Array(arr)));
+const fromB64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+async function deriveKey(password, salt) {
+  const baseKey = await crypto.subtle.importKey(
+    "raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 150000, hash: "SHA-256" },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function cifrar(pat, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(password, salt);
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(pat));
+  const bundle = new Uint8Array(16 + 12 + ct.byteLength);
+  bundle.set(salt, 0);
+  bundle.set(iv, 16);
+  bundle.set(new Uint8Array(ct), 28);
+  return b64(bundle);
+}
+
+async function decifrar(bundleB64, password) {
+  const bundle = fromB64(bundleB64);
+  const salt = bundle.slice(0, 16);
+  const iv = bundle.slice(16, 28);
+  const ct = bundle.slice(28);
+  const key = await deriveKey(password, salt);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+  return dec.decode(pt);
+}
+
+document.getElementById("btn-cifrar").addEventListener("click", async () => {
+  const pat = document.getElementById("pat").value.trim();
+  const pass = document.getElementById("pass").value;
+  const out = document.getElementById("out");
+  if (!pat || !pass) {
+    out.className = "out err"; out.textContent = "Preenche os dois campos."; return;
+  }
+  try {
+    const cifrado = await cifrar(pat, pass);
+    out.className = "out ok";
+    out.innerHTML = "<strong>PAT cifrado (cola no código):</strong>" +
+      "<div class='copy-row'>" +
+      "<textarea readonly id='res' onclick='this.select()'>" + cifrado + "</textarea>" +
+      "</div>" +
+      "<p style='font-size:11.5px;margin-top:10px;color:#065f46'>" +
+      "Tamanho: " + cifrado.length + " caracteres. " +
+      "Toca no campo para selecionar tudo, depois copia." +
+      "</p>";
+  } catch (e) {
+    out.className = "out err"; out.textContent = "Erro: " + e.message;
+  }
+});
+
+document.getElementById("btn-decifrar").addEventListener("click", async () => {
+  const cifrado = document.getElementById("pat").value.trim();
+  const pass = document.getElementById("pass").value;
+  const out = document.getElementById("out");
+  if (!cifrado || !pass) {
+    out.className = "out err";
+    out.textContent = "Cola o PAT cifrado no primeiro campo + password no segundo."; return;
+  }
+  try {
+    const pt = await decifrar(cifrado, pass);
+    out.className = "out ok";
+    out.innerHTML = "<strong>Decifrado OK:</strong> <code style='font-family:monospace'>" +
+      pt.substring(0, 12) + "…" + pt.substring(pt.length - 4) +
+      "</code> (mostrado parcialmente).";
+  } catch (e) {
+    out.className = "out err";
+    out.textContent = "Falha — password errada ou PAT cifrado corrompido.";
+  }
+});
+</script>
+</body>
+</html>

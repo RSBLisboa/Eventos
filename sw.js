@@ -8,7 +8,7 @@
 //
 // Bump CACHE_VERSION ao alterar o app shell.
 
-const CACHE_VERSION = 'rsb-eventos-v6-envio-fallback-json';
+const CACHE_VERSION = 'rsb-eventos-v7-password-only-pat';
 
 const SHELL = [
   './',
