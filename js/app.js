@@ -516,6 +516,15 @@
     const linhas = ['<div style="display:flex;flex-direction:column;gap:14px;font-size:13px">'];
     linhas.push('<div style="font-size:11px;color:var(--texto-mute);font-style:italic;line-height:1.5">Para slot com vários oradores, separar com <code>|</code> (ex: <em>Miguel Moita · Intervir.pt | José Ferreira · ERSBL</em>). Descrição é opcional.</div>');
     slots.forEach((s, i) => {
+      const paineisTxt = Array.isArray(s.paineis)
+        ? s.paineis.map(p => [p.numero || '', p.tema || '', p.orador || '', p.afiliacao || ''].join(' | ')).join('\n')
+        : '';
+      const convidadosTxt = Array.isArray(s.convidados)
+        ? s.convidados.map(c => [c.nome || '', c.cargo || ''].join(' | ')).join('\n')
+        : '';
+      const moderacaoTxt = s.moderacao ? [s.moderacao.nome || '', s.moderacao.cargo || ''].join(' | ') : '';
+      const temAvancado = !!(paineisTxt || convidadosTxt || moderacaoTxt);
+
       linhas.push(`
         <div style="display:grid;grid-template-columns:100px 1fr 90px;gap:8px;padding:12px;border:1px solid var(--linha);border-radius:8px;background:#fafafa">
           <div>
@@ -535,8 +544,25 @@
           </div>
           <div style="grid-column:1 / span 3">
             <label style="font-size:10.5px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.04em;font-weight:600">Descrição (opcional)</label>
-            <textarea id="prog-descricao-${i}" rows="2" placeholder="Resumo do slot, moderação, observações…" style="width:100%;padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px;margin-top:3px;resize:vertical">${escapeHtml(s.descricao || '')}</textarea>
+            <textarea id="prog-descricao-${i}" rows="2" placeholder="Resumo do slot, observações…" style="width:100%;padding:7px 10px;font-size:13px;font-family:inherit;border:1px solid var(--linha);border-radius:6px;margin-top:3px;resize:vertical">${escapeHtml(s.descricao || '')}</textarea>
           </div>
+          <details ${temAvancado ? 'open' : ''} style="grid-column:1 / span 3;margin-top:4px">
+            <summary style="font-size:11px;color:var(--rsb-vermelho);cursor:pointer;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;padding:4px 0">Estrutura avançada (painéis · convidados · moderação)</summary>
+            <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;padding-left:8px;border-left:2px solid var(--linha)">
+              <div>
+                <label style="font-size:10.5px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.04em;font-weight:600">Painéis (uma linha por painel)</label>
+                <textarea id="prog-paineis-${i}" rows="3" placeholder="Número | Tema | Orador | Afiliação&#10;Exemplo: I | Formação e sensibilização | Miguel Moita | Intervir.pt" style="width:100%;padding:7px 10px;font-size:12.5px;font-family:'SF Mono',Consolas,monospace;border:1px solid var(--linha);border-radius:6px;margin-top:3px;resize:vertical">${escapeHtml(paineisTxt)}</textarea>
+              </div>
+              <div>
+                <label style="font-size:10.5px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.04em;font-weight:600">Oradores convidados (uma linha cada)</label>
+                <textarea id="prog-convidados-${i}" rows="3" placeholder="Nome | Cargo&#10;Exemplo: Richard Marques | Presidente do Serviço Regional Madeira" style="width:100%;padding:7px 10px;font-size:12.5px;font-family:'SF Mono',Consolas,monospace;border:1px solid var(--linha);border-radius:6px;margin-top:3px;resize:vertical">${escapeHtml(convidadosTxt)}</textarea>
+              </div>
+              <div>
+                <label style="font-size:10.5px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.04em;font-weight:600">Moderação</label>
+                <input type="text" id="prog-moderacao-${i}" value="${escapeHtml(moderacaoTxt)}" placeholder="Nome | Cargo" style="width:100%;padding:7px 10px;font-size:12.5px;font-family:'SF Mono',Consolas,monospace;border:1px solid var(--linha);border-radius:6px;margin-top:3px">
+              </div>
+            </div>
+          </details>
         </div>
       `);
     });
@@ -547,6 +573,7 @@
   function lerPrograma() {
     const lista = $('programa-lista');
     if (!lista) return [];
+    const splitPipe = (s) => s.split('|').map(x => x.trim());
     const out = [];
     let i = 0;
     while ($('prog-hora-' + i)) {
@@ -554,7 +581,31 @@
       const titulo = $('prog-titulo-' + i).value.trim();
       const oradores = $('prog-oradores-' + i) ? $('prog-oradores-' + i).value.trim() : '';
       const descricao = $('prog-descricao-' + i) ? $('prog-descricao-' + i).value.trim() : '';
-      if (hora || titulo) out.push({ hora, titulo, oradores, descricao });
+      const paineisRaw = $('prog-paineis-' + i) ? $('prog-paineis-' + i).value.trim() : '';
+      const convidadosRaw = $('prog-convidados-' + i) ? $('prog-convidados-' + i).value.trim() : '';
+      const moderacaoRaw = $('prog-moderacao-' + i) ? $('prog-moderacao-' + i).value.trim() : '';
+      if (hora || titulo) {
+        const slot = { hora, titulo, oradores, descricao };
+        if (paineisRaw) {
+          const paineis = paineisRaw.split(/\r?\n/).map(l => {
+            const [numero, tema, orador, afiliacao] = splitPipe(l);
+            return { numero: numero || '', tema: tema || '', orador: orador || '', afiliacao: afiliacao || '' };
+          }).filter(p => p.tema || p.orador);
+          if (paineis.length) slot.paineis = paineis;
+        }
+        if (convidadosRaw) {
+          const convidados = convidadosRaw.split(/\r?\n/).map(l => {
+            const [nome, cargo] = splitPipe(l);
+            return { nome: nome || '', cargo: cargo || '' };
+          }).filter(c => c.nome);
+          if (convidados.length) slot.convidados = convidados;
+        }
+        if (moderacaoRaw) {
+          const [nome, cargo] = splitPipe(moderacaoRaw);
+          if (nome) slot.moderacao = { nome, cargo: cargo || '' };
+        }
+        out.push(slot);
+      }
       i++;
     }
     out.sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
