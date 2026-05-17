@@ -607,6 +607,26 @@
       </div>
     </div>
 
+    <div class="panel">
+      <h2>Distribuição de lugares (sala)</h2>
+      <p class="lead">Lista de lugares do auditório e quem está atribuído a cada um. Para outros eventos basta editar a lista (lugares numéricos + lugares R<em>x</em> para reservados).</p>
+      <div class="form-grid">
+        <div class="full">
+          <label>Nome da sala</label>
+          <input type="text" id="evt-sala-nome" placeholder="Ex: Auditório do Metropolitano de Lisboa">
+        </div>
+        <div class="full">
+          <label>Lugares disponíveis (separados por vírgula ou linha)</label>
+          <textarea id="evt-sala-lugares" rows="3" placeholder="1, 2, 3, ..., 46, R1, R2, ..., R8" style="font-family:'SF Mono',Consolas,monospace;font-size:12.5px"></textarea>
+          <div class="help">Prefixo <code>R</code> = lugar reservado (VIP, destaque amarelo no QR do participante). Os outros aparecem cinza neutro.</div>
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <h3 style="font-size:14px;margin:0 0 8px">Atribuições</h3>
+        <div id="sala-atribuicoes" style="font-size:13px"></div>
+      </div>
+    </div>
+
     <!-- ────── B · OPERAÇÃO NO TERRENO ────── -->
     <div style="font-size:11px;color:var(--rsb-vermelho);font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin:18px 0 -6px 4px">B · Operação no terreno</div>
 

@@ -502,6 +502,105 @@
     $('evt-bridge-from').value = e.bridgeFrom || '';
     renderUsersGrid();
     renderPrograma();
+    renderSala();
+  }
+
+  function renderSala() {
+    const e = ST.evento || {};
+    const sala = e.sala || {};
+    const lugares = Array.isArray(sala.lugares) ? sala.lugares : [];
+    const nomeEl = $('evt-sala-nome');
+    const lugaresEl = $('evt-sala-lugares');
+    if (nomeEl) nomeEl.value = sala.nome || '';
+    if (lugaresEl) lugaresEl.value = lugares.join(', ');
+    renderSalaAtribuicoes();
+  }
+
+  function renderSalaAtribuicoes() {
+    const el = $('sala-atribuicoes');
+    if (!el) return;
+    const e = ST.evento || {};
+    const sala = e.sala || {};
+    const lugares = Array.isArray(sala.lugares) ? sala.lugares : [];
+    const inscritos = ST.inscritos || [];
+    if (!lugares.length) {
+      el.innerHTML = '<div class="help">Define a lista de lugares acima.</div>';
+      return;
+    }
+    // Mapa lugar → inscrito
+    const mapaPorLugar = new Map();
+    const semLugar = [];
+    inscritos.forEach(i => {
+      if (i.lugar) mapaPorLugar.set(String(i.lugar), i);
+    });
+    inscritos.forEach(i => {
+      if (!i.lugar && i.estado && /confirm/i.test(i.estado)) semLugar.push(i);
+    });
+
+    const opcoes = ['<option value="">— vazio —</option>']
+      .concat(inscritos
+        .filter(i => i.estado && /confirm/i.test(i.estado))
+        .sort((a,b) => normalizar(a.nome||'').localeCompare(normalizar(b.nome||'')))
+        .map(i => `<option value="${i.id}">${escapeHtml(i.nome)} (id ${i.id})</option>`)
+      ).join('');
+
+    const linhas = lugares.map(lugar => {
+      const occupied = mapaPorLugar.get(String(lugar));
+      const ehR = String(lugar).toUpperCase().startsWith('R');
+      const bgPill = ehR ? '#fef3c7' : '#f1f5f9';
+      const fgPill = ehR ? '#92400e' : '#1e293b';
+      const borderPill = ehR ? '#fde68a' : '#cbd5e1';
+      return `
+        <div style="display:grid;grid-template-columns:64px 1fr 32px;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--linha)">
+          <span style="display:inline-block;background:${bgPill};color:${fgPill};font-weight:700;text-align:center;padding:4px 8px;border-radius:6px;border:1px solid ${borderPill};font-size:13px">${escapeHtml(lugar)}</span>
+          <select data-sala-lugar="${escapeHtml(lugar)}" style="padding:6px 10px;font-size:13px;border:1px solid var(--linha);border-radius:6px;font-family:inherit;background:#fff">
+            ${opcoes.replace('value="' + (occupied ? occupied.id : '__none__') + '"', 'value="' + (occupied ? occupied.id : '__none__') + '" selected')}
+          </select>
+          <span style="color:var(--texto-mute);font-size:11.5px">${occupied ? '✓' : ''}</span>
+        </div>
+      `;
+    }).join('');
+
+    const stats = `
+      <div class="alert ${semLugar.length ? 'warn' : 'ok'}" style="margin-bottom:10px;font-size:12.5px">
+        ${mapaPorLugar.size} dos ${lugares.length} lugares atribuídos · ${semLugar.length} confirmados sem lugar
+      </div>
+    `;
+    el.innerHTML = stats + '<div style="max-height:400px;overflow:auto;border:1px solid var(--linha);border-radius:6px;padding:8px 12px">' + linhas + '</div>';
+
+    // Bind change handlers
+    el.querySelectorAll('select[data-sala-lugar]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const lugar = sel.dataset.salaLugar;
+        const novoId = sel.value;
+        // Limpar lugar de quem já tinha esse lugar
+        ST.inscritos.forEach(i => {
+          if (String(i.lugar) === String(lugar)) delete i.lugar;
+        });
+        // Atribuir ao novo
+        if (novoId) {
+          const inscrito = ST.inscritos.find(x => String(x.id) === String(novoId));
+          if (inscrito) inscrito.lugar = lugar;
+        }
+        renderSalaAtribuicoes();
+        renderInscritos();
+      });
+    });
+  }
+
+  function lerSala() {
+    const nomeEl = $('evt-sala-nome');
+    const lugaresEl = $('evt-sala-lugares');
+    if (!nomeEl || !lugaresEl) return null;
+    const lugares = (lugaresEl.value || '')
+      .split(/[,\n]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    return {
+      nome: nomeEl.value.trim(),
+      totalLugares: lugares.length,
+      lugares
+    };
   }
 
   function renderPrograma() {
@@ -664,6 +763,8 @@
     e.bridgeFrom = $('evt-bridge-from').value.trim();
     setBridgeSecret($('evt-bridge-secret').value.trim());
     e.programa = lerPrograma();
+    const sala = lerSala();
+    if (sala) e.sala = sala;
     e.actualizadoEm = nowIso();
     return e;
   }
@@ -2313,6 +2414,15 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     $('btn-setup-reload').addEventListener('click', setupRecarregar);
     $('btn-revogar-tablets').addEventListener('click', revogarTablets);
     $('btn-arquivar-evento').addEventListener('click', arquivarEvento);
+    // Re-render das atribuições quando a lista de lugares muda
+    const salaLugaresEl = $('evt-sala-lugares');
+    if (salaLugaresEl) {
+      salaLugaresEl.addEventListener('input', () => {
+        if (!ST.evento) ST.evento = {};
+        ST.evento.sala = lerSala();
+        renderSalaAtribuicoes();
+      });
+    }
     $('btn-prog-add').addEventListener('click', () => {
       const actual = lerPrograma();
       actual.push({ hora: '', titulo: '', oradores: '', descricao: '' });
