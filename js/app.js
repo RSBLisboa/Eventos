@@ -1033,10 +1033,11 @@
 
     // Aplicar busca (se preenchida)
     const busca = (ST.inscritosBusca || '').trim();
+    const filtroCat = ST.filtroCategoria || '';
     let lista = ST.inscritos;
     if (busca) {
       const q = normalizar(busca);
-      lista = ST.inscritos.filter(i => {
+      lista = lista.filter(i => {
         const emailLocal = ST.inscritosAdmin[i.id] || '';
         return normalizar(i.nome || '').includes(q)
           || normalizar(i.cargo || '').includes(q)
@@ -1046,6 +1047,13 @@
           || normalizar(i.token || '').includes(q)
           || String(i.id || '').includes(q);
       });
+    }
+    if (filtroCat) {
+      if (filtroCat === '__participante__') {
+        lista = lista.filter(i => !i.categoria);
+      } else {
+        lista = lista.filter(i => (i.categoria || '') === filtroCat);
+      }
     }
 
     // Preview do Excel (em sessão)
@@ -1091,12 +1099,14 @@
         ? '<span class="pill amarelo" title="Auto-inscrito · não estava na lista original">Auto</span>'
         : (eraConv === 'Sim' ? '<span class="pill cinza" title="Estava na lista de convidados original">Conv.</span>' : '');
       const flagNaoEnviar = i.naoEnviar ? '<span class="pill amarelo" title="Flag: Não enviar mail">🚫</span>' : '';
+      const pillCat = pillCategoria(i.categoria);
       return `<tr class="hover" data-row-id="${i.id}">
         <td><span class="small mono" style="color:var(--texto-mute)">${escapeHtml(String(i.id || ''))}</span></td>
         <td>${escapeHtml(i.nome)} ${flagNaoEnviar}</td>
         <td><span class="small">${escapeHtml(i.cargo || '—')}</span></td>
         <td><span class="small">${escapeHtml(i.entidade || '—')}</span></td>
         ${colEmail}
+        <td>${pillCat}</td>
         <td><span class="estado-pill-click" data-id="${i.id}" style="cursor:pointer" title="Click para ciclar estado">${pillEstado(i.estado)}</span></td>
         <td>${pillEra}</td>
         <td><button class="acao-edit" data-id="${i.id}" style="background:transparent;border:1px solid var(--linha);border-radius:4px;padding:3px 8px;cursor:pointer;font-size:13px" title="Editar">✏️</button></td>
@@ -1108,12 +1118,29 @@
           <th style="width:50px">ID</th>
           <th>Nome</th><th>Cargo</th><th>Entidade</th>
           ${comEmail ? '<th>Email (sessão)</th>' : ''}
+          <th style="width:130px">Categoria</th>
           <th style="width:120px">Estado</th>
           <th style="width:70px">Origem</th>
           <th style="width:48px"></th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table></div>`;
+  }
+
+  // Pill colorida para a categoria (mesma paleta do p.html)
+  function pillCategoria(cat) {
+    if (!cat) return '<span class="small" style="color:var(--texto-mute)">—</span>';
+    const cores = {
+      'Organização': '#1a1a1a',
+      'Orador': '#E30613',
+      'Orador Convidado': '#C46C00',
+      'Moderação': '#6b21a8',
+      'Coautor do Livreto': '#0e7490',
+      'VIP': '#a16207',
+      'Imprensa': '#1565c0'
+    };
+    const cor = cores[cat] || '#5a5a5a';
+    return `<span style="display:inline-block;background:${cor};color:#fff;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;padding:3px 8px;border-radius:999px">${escapeHtml(cat)}</span>`;
   }
 
   // Ciclo de estados (clique na pill)
@@ -1157,6 +1184,7 @@
     $('edit-entidade').value = i.entidade || '';
     $('edit-estado').value = i.estado || 'Pendente';
     $('edit-era-conv').value = (i.eraConvidado === 'Não' || i.eraConvidado === 'Nao' || i.eraConvidado === false) ? 'Não' : 'Sim';
+    $('edit-categoria').value = i.categoria || '';
     $('edit-nao-enviar').checked = !!i.naoEnviar;
     $('edit-autoriza').checked = !!i.autorizaContacto;
     $('edit-delete').style.display = '';
@@ -1182,6 +1210,7 @@
     $('edit-entidade').value = '';
     $('edit-estado').value = 'Confirmada';
     $('edit-era-conv').value = 'Não';
+    $('edit-categoria').value = '';
     $('edit-nao-enviar').checked = false;
     $('edit-autoriza').checked = false;
     $('edit-delete').style.display = 'none';
@@ -1209,6 +1238,7 @@
       autorizaContacto: $('edit-autoriza').checked,
       estado: $('edit-estado').value,
       eraConvidado: $('edit-era-conv').value,
+      categoria: $('edit-categoria').value,         // manual: sobrepõe-se à detecção automática
       naoEnviar: $('edit-nao-enviar').checked
     };
 
@@ -2312,6 +2342,15 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       if (inp) inp.addEventListener('input', () => {
         ST[b.key] = inp.value;
         b.rerender();
+      });
+    }
+
+    // Filtro por categoria na lista de inscritos
+    const filtroCat = $('inscritos-filtro-cat');
+    if (filtroCat) {
+      filtroCat.addEventListener('change', () => {
+        ST.filtroCategoria = filtroCat.value;
+        renderInscritos();
       });
     }
 

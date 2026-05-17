@@ -797,8 +797,19 @@
         <span class="small" style="margin-left:8px;color:var(--texto-mute)">Clica numa linha para editar · clica no pill de estado para ciclar</span>
       </div>
 
-      <div style="margin:14px 0 8px">
-        <input type="search" id="inscritos-busca" placeholder="Pesquisar nome, cargo, entidade, email, token, ID…" autocomplete="off" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid var(--linha);border-radius:8px;background:#fafafa;font-family:inherit">
+      <div style="margin:14px 0 8px;display:flex;gap:8px;align-items:center">
+        <input type="search" id="inscritos-busca" placeholder="Pesquisar nome, cargo, entidade, email, token, ID…" autocomplete="off" style="flex:1;padding:10px 14px;font-size:14px;border:1px solid var(--linha);border-radius:8px;background:#fafafa;font-family:inherit">
+        <select id="inscritos-filtro-cat" style="padding:10px 14px;font-size:13px;border:1px solid var(--linha);border-radius:8px;background:#fafafa;font-family:inherit;cursor:pointer">
+          <option value="">Todas as categorias</option>
+          <option value="Organização">Organização</option>
+          <option value="Orador">Orador</option>
+          <option value="Orador Convidado">Orador Convidado</option>
+          <option value="Moderação">Moderação</option>
+          <option value="Coautor do Livreto">Coautor do Livreto</option>
+          <option value="VIP">VIP</option>
+          <option value="Imprensa">Imprensa</option>
+          <option value="__participante__">Sem categoria (participantes)</option>
+        </select>
       </div>
 
       <div id="inscritos-preview" class="hide" style="margin-top:16px"></div>
@@ -897,6 +908,19 @@
             <select id="edit-era-conv">
               <option value="Sim">Convidado · lista original</option>
               <option value="Não">Auto-inscrito · não estava</option>
+            </select>
+          </div>
+          <div class="full">
+            <label>Categoria <span style="color:var(--texto-mute);font-weight:400">(opcional · sobrepõe-se à detecção automática)</span></label>
+            <select id="edit-categoria">
+              <option value="">— Participante (sem categoria) —</option>
+              <option value="Organização">Organização (staff)</option>
+              <option value="Orador">Orador</option>
+              <option value="Orador Convidado">Orador Convidado</option>
+              <option value="Moderação">Moderação</option>
+              <option value="Coautor do Livreto">Coautor do Livreto</option>
+              <option value="VIP">VIP</option>
+              <option value="Imprensa">Imprensa</option>
             </select>
           </div>
         </div>
