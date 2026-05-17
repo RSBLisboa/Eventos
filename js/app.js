@@ -1505,14 +1505,22 @@
     const inscritosMap = new Map();
     for (const i of ST.inscritos) inscritosMap.set(i.id, i);
 
-    const semEmail = seleccionados.filter(c => !ST.inscritosAdmin[c.idInscricao]);
+    // Helper: email da sessão Excel OU email do JSON publico (schema@2).
+    const obterEmail = (idInscricao) => {
+      const ss = ST.inscritosAdmin[idInscricao];
+      if (ss) return ss;
+      const i = inscritosMap.get(idInscricao);
+      return (i && i.email) ? i.email.trim() : '';
+    };
+
+    const semEmail = seleccionados.filter(c => !obterEmail(c.idInscricao));
     if (semEmail.length === seleccionados.length) {
-      toast('Nenhum dos seleccionados tem email em sessão.', 'err');
+      toast('Nenhum dos seleccionados tem email (nem na sessão, nem no JSON).', 'err');
       return;
     }
     if (semEmail.length > 0) {
       const ok = await confirmar('Emails em falta',
-        `${semEmail.length} dos ${seleccionados.length} seleccionados não têm email em sessão. Continuar (vão ser ignorados)?`);
+        `${semEmail.length} dos ${seleccionados.length} seleccionados não têm email. Continuar (vão ser ignorados)?`);
       if (!ok) return;
     }
 
@@ -1525,7 +1533,7 @@
       const zip = new JSZip();
       let n = 0;
       for (const cert of seleccionados) {
-        const email = ST.inscritosAdmin[cert.idInscricao];
+        const email = obterEmail(cert.idInscricao);
         if (!email) continue;
         const inscrito = inscritosMap.get(cert.idInscricao);
         if (!inscrito) continue;
@@ -1580,9 +1588,10 @@ Total: ${n} emails
     for (const i of ST.inscritos) inscritosMap.set(i.id, i);
 
     for (const cert of seleccionados) {
-      const email = ST.inscritosAdmin[cert.idInscricao];
+      const insc = inscritosMap.get(cert.idInscricao);
+      const email = ST.inscritosAdmin[cert.idInscricao] || (insc && insc.email ? insc.email.trim() : '');
       if (!email) continue;
-      const inscrito = inscritosMap.get(cert.idInscricao);
+      const inscrito = insc;
       if (!inscrito) continue;
       const e = ST.evento;
       const sig = e.signatario || 'TCor Eng. Alexandre Rodrigues';
@@ -1694,9 +1703,10 @@ Total: ${n} emails
     const emails = [];
     let semEmail = 0;
     for (const cert of seleccionados) {
-      const email = ST.inscritosAdmin[cert.idInscricao];
+      const insc = inscritosMap.get(cert.idInscricao);
+      const email = ST.inscritosAdmin[cert.idInscricao] || (insc && insc.email ? insc.email.trim() : '');
       if (!email) { semEmail++; continue; }
-      const inscrito = inscritosMap.get(cert.idInscricao);
+      const inscrito = insc;
       if (!inscrito) continue;
       const e = ST.evento;
       const vars = {
@@ -1815,7 +1825,7 @@ Total: ${n} emails
         ST.inscritos.map(i => ({
           id: i.id, nome: i.nome, cargo: i.cargo, entidade: i.entidade,
           categoria: i.categoria, estado: i.estado,
-          email: ST.inscritosAdmin[i.id] || ''
+          email: ST.inscritosAdmin[i.id] || (i.email || '')
         })), null, 2));
 
       zip.file('LEIA-ME.txt',

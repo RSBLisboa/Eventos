@@ -8,7 +8,7 @@
 //
 // Bump CACHE_VERSION ao alterar o app shell.
 
-const CACHE_VERSION = 'rsb-eventos-v5-clean-inputs-fix';
+const CACHE_VERSION = 'rsb-eventos-v6-envio-fallback-json';
 
 const SHELL = [
   './',
