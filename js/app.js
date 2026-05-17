@@ -789,9 +789,13 @@
     const linhas = lista.map(i => {
       let colEmail = '';
       if (comEmail) {
-        const em = ST.inscritosAdmin[i.id];
+        // Prioridade: email da sessão local (recém-carregado do Excel) > email do JSON público.
+        const emSession = ST.inscritosAdmin[i.id];
+        const emJson = (i.email || '').trim();
+        const em = emSession || emJson;
+        const origem = emSession ? 'sessão' : (emJson ? 'JSON' : '');
         colEmail = em
-          ? `<td class="truncate"><span class="small mono">${escapeHtml(em)}</span></td>`
+          ? `<td class="truncate"><span class="small mono" title="origem: ${origem}">${escapeHtml(em)}</span></td>`
           : `<td><span class="small" style="color:var(--erro)">— sem email —</span></td>`;
       }
       const eraConv = i.eraConvidado;
@@ -1370,7 +1374,8 @@
 
     const linhas = listaCerts.map(c => {
       const i = inscritosMap.get(c.idInscricao) || { nome: '?', cargo: '', entidade: '', naoEnviar: false };
-      const email = ST.inscritosAdmin[c.idInscricao] || '';
+      // Email da sessão local tem prioridade (recém-importado); fallback para o JSON.
+      const email = ST.inscritosAdmin[c.idInscricao] || (i.email || '').trim() || '';
       const enviado = !!c.dataEnvioEmail;
       const naoEnviar = !!i.naoEnviar;
       const podeEnviar = !!email && !enviado && !c.anulado && !naoEnviar;
