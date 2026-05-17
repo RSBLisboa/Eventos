@@ -221,31 +221,28 @@
     color: var(--texto-mute);
     margin-bottom: 5px;
   }
-  #modal-edit-inscrito input[type=text],
-  #modal-edit-inscrito input[type=email],
-  #modal-edit-inscrito input[type=password],
+  #modal-edit-inscrito input:not([type=checkbox]):not([type=hidden]),
   #modal-edit-inscrito select {
     background: #fff;
-    border: 1px solid transparent;
-    border-bottom: 1px solid var(--linha);
+    border: 1px solid var(--linha);
     border-radius: 6px;
     padding: 11px 13px;
     font-size: 14.5px;
-    transition: border-color 0.15s, background 0.15s;
+    width: 100%;
+    font-family: inherit;
+    color: var(--texto);
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   }
-  #modal-edit-inscrito input[type=text]:hover,
-  #modal-edit-inscrito input[type=email]:hover,
-  #modal-edit-inscrito input[type=password]:hover,
+  #modal-edit-inscrito input:not([type=checkbox]):not([type=hidden]):hover,
   #modal-edit-inscrito select:hover {
-    border-color: #c4c4c4;
+    border-color: #b8b8b8;
   }
-  #modal-edit-inscrito input[type=text]:focus,
-  #modal-edit-inscrito input[type=email]:focus,
-  #modal-edit-inscrito input[type=password]:focus,
+  #modal-edit-inscrito input:not([type=checkbox]):not([type=hidden]):focus,
   #modal-edit-inscrito select:focus {
     background: #fff;
     border-color: var(--rsb-vermelho);
     box-shadow: 0 0 0 3px var(--rsb-vermelho-claro);
+    outline: none;
   }
   #modal-edit-inscrito .form-grid { gap: 14px 18px; }
   #modal-edit-inscrito .form-grid > div { margin: 0; }
