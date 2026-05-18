@@ -3197,13 +3197,12 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       filasInfo.forEach((fi, idx) => {
         const slots = [];
         const y = startY + idx * stepV;
-        // Centrar cada fila no espaço total
         const filaTotal = fi.larguraLugares + cfg.corredores * cfg.corredorLarg;
         let x = startX + (larguraTotal - filaTotal) / 2;
         let nr = 1;
         fi.blocos.forEach((nBloco, bi) => {
           for (let i = 0; i < nBloco; i++) {
-            slots.push({ lugar: nr++, fila: fi.label, x: x + cfg.seat/2, y: y + cfg.seat/2 });
+            slots.push({ lugar: nr++, fila: fi.label, sector: bi, x: x + cfg.seat/2, y: y + cfg.seat/2 });
             x += stepH;
           }
           if (nBloco > 0) x -= cfg.gapH;
@@ -3285,7 +3284,7 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
           for (let i = 0; i < nBloco; i++) {
             const x = f.raio * Math.cos(ang);
             const y = f.raio * Math.sin(ang);
-            slots.push({ lugar: f.ehR ? 'R' + nr : nr, fila: f.label, x, y });
+            slots.push({ lugar: f.ehR ? 'R' + nr : nr, fila: f.label, sector: bi, x, y });
             nr++;
             if (i < nBloco - 1) ang += Krad;
           }
@@ -3441,6 +3440,7 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       svg.innerHTML = html;
       bindCliquesLugares();
       atualizarStats();
+      if (typeof atualizarStatsAuto === 'function') atualizarStatsAuto();
       const zEl = document.getElementById('ed-zoom-level');
       if (zEl) zEl.textContent = Math.round(ES.zoom * 100) + '%';
     }
@@ -3826,6 +3826,155 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       reader.readAsText(file);
     }
 
+    // ─── Distribuição inteligente por entidade ───────────────────────────────
+    // Marca inscritos colocados automaticamente com lugarAuto=true para
+    // poder revogar sem tocar nas atribuições manuais.
+    function distribuirInteligente(opts) {
+      opts = opts || {};
+      const limparAntes = opts.limparAntes !== false;
+      const seed = opts.seed || Date.now();
+
+      // 1. Limpar atribuições auto anteriores (preserva manuais)
+      if (limparAntes) {
+        ST.inscritos.forEach(i => {
+          if (i.lugarAuto && i.lugar) {
+            ES.ocupacoes.delete(String(i.lugar));
+            delete i.lugar;
+            delete i.lugarAuto;
+          }
+        });
+      }
+
+      // 2. Inscritos a sentar: sem lugar, confirmados
+      const aSentar = ST.inscritos.filter(i =>
+        !i.lugar && i.estado && /confirm/i.test(i.estado)
+      );
+      if (!aSentar.length) {
+        toast('Sem inscritos confirmados sem lugar.', 'err');
+        render();
+        return { atribuidos: 0, naoAtribuidos: 0 };
+      }
+
+      // 3. Agrupar por entidade, ordenar (maior primeiro; sem-entidade no fim)
+      const porEntidade = new Map();
+      aSentar.forEach(i => {
+        const k = (i.entidade || '').trim() || '__sem_ent__';
+        if (!porEntidade.has(k)) porEntidade.set(k, []);
+        porEntidade.get(k).push(i);
+      });
+      const grupos = Array.from(porEntidade.entries()).sort((a, b) => {
+        if (a[0] === '__sem_ent__') return 1;
+        if (b[0] === '__sem_ent__') return -1;
+        return b[1].length - a[1].length;
+      });
+      // Embaralhar ordem dentro de cada grupo com seed para variabilidade ao "refazer"
+      const rng = mulberry32(seed);
+      grupos.forEach(([, arr]) => arr.sort(() => rng() - 0.5));
+
+      // 4. Lugares livres por bloco (fila + sector) — exclui R*
+      const livresPorBloco = new Map();
+      ES.seats.forEach(s => {
+        if (ES.ocupacoes.has(s.codigo)) return;
+        if (String(s.lugar).toString().startsWith('R')) return;
+        const key = s.fila + '_' + (s.sector || 0);
+        if (!livresPorBloco.has(key)) livresPorBloco.set(key, []);
+        livresPorBloco.get(key).push(s);
+      });
+      // Ordenar lugares dentro de cada bloco (ordem natural pelo lugar numérico)
+      livresPorBloco.forEach(arr =>
+        arr.sort((a, b) => (parseInt(a.lugar) || 0) - (parseInt(b.lugar) || 0))
+      );
+
+      // 5. Atribuir grupos: best-fit (menor bloco que ainda caiba o grupo)
+      let atribuidos = 0;
+      const naoAtribuidos = [];
+      grupos.forEach(([, inscritos]) => {
+        const restantes = inscritos.slice();
+        while (restantes.length > 0) {
+          let bestKey = null, bestFit = Infinity;
+          // Primeiro: bloco que cabe inteiro (menor possível)
+          livresPorBloco.forEach((arr, key) => {
+            if (arr.length >= restantes.length && arr.length < bestFit) {
+              bestFit = arr.length; bestKey = key;
+            }
+          });
+          // Se nenhum cabe inteiro: usar o maior bloco disponível
+          if (bestKey == null) {
+            let maxN = 0;
+            livresPorBloco.forEach((arr, key) => {
+              if (arr.length > maxN) { maxN = arr.length; bestKey = key; }
+            });
+          }
+          if (!bestKey || !livresPorBloco.get(bestKey)?.length) {
+            // Sem mais lugares disponíveis
+            naoAtribuidos.push(...restantes);
+            restantes.length = 0;
+            break;
+          }
+          const bloco = livresPorBloco.get(bestKey);
+          const tomar = Math.min(restantes.length, bloco.length);
+          for (let i = 0; i < tomar; i++) {
+            const insc = restantes.shift();
+            const slot = bloco.shift();
+            insc.lugar = slot.codigo;
+            insc.lugarAuto = true;
+            ES.ocupacoes.set(slot.codigo, insc.id);
+            atribuidos++;
+          }
+          if (bloco.length === 0) livresPorBloco.delete(bestKey);
+        }
+      });
+
+      render();
+      atualizarStatsAuto();
+      const msg = naoAtribuidos.length === 0
+        ? `${atribuidos} inscritos distribuídos por entidade.`
+        : `${atribuidos} distribuídos · ${naoAtribuidos.length} sem lugar disponível.`;
+      toast(msg, naoAtribuidos.length === 0 ? 'ok' : 'err');
+      return { atribuidos, naoAtribuidos: naoAtribuidos.length };
+    }
+
+    function revogarDistribuicaoAuto() {
+      let removidos = 0;
+      ST.inscritos.forEach(i => {
+        if (i.lugarAuto && i.lugar) {
+          ES.ocupacoes.delete(String(i.lugar));
+          delete i.lugar;
+          delete i.lugarAuto;
+          removidos++;
+        }
+      });
+      render();
+      atualizarStatsAuto();
+      if (removidos > 0) toast(`Revogadas ${removidos} atribuições automáticas.`, 'ok');
+      else toast('Nenhuma atribuição automática para revogar.', 'err');
+    }
+
+    function refazerDistribuicao() {
+      // Limpa auto e gera de novo com seed diferente
+      distribuirInteligente({ limparAntes: true, seed: Date.now() + Math.floor(Math.random() * 1e6) });
+    }
+
+    function atualizarStatsAuto() {
+      const auto = ST.inscritos.filter(i => i.lugarAuto && i.lugar).length;
+      const manual = ST.inscritos.filter(i => i.lugar && !i.lugarAuto).length;
+      const semLugar = ST.inscritos.filter(i => !i.lugar && i.estado && /confirm/i.test(i.estado)).length;
+      const el = document.getElementById('ed-dist-info');
+      if (el) {
+        el.innerHTML = `<strong style="color:#0e7490">${auto}</strong> automáticos · <strong style="color:#15803d">${manual}</strong> manuais · <strong style="color:#a16207">${semLugar}</strong> por sentar`;
+      }
+    }
+
+    // PRNG seedeado (mulberry32) para resultados reproduzíveis com seed.
+    function mulberry32(a) {
+      return function() {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
     // Renderiza tabela editável de lugares por sector/fila.
     function renderTabelaSetores() {
       const wrap = document.getElementById('ed-setores-tabela');
@@ -3941,6 +4090,13 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       if (apply) apply.addEventListener('click', aplicarSetores);
       const auto = document.getElementById('ed-setores-auto');
       if (auto) auto.addEventListener('click', resetSetoresAuto);
+      // Distribuição inteligente
+      const dist = document.getElementById('ed-dist-distribuir');
+      if (dist) dist.addEventListener('click', () => distribuirInteligente({ limparAntes: true }));
+      const refazer = document.getElementById('ed-dist-refazer');
+      if (refazer) refazer.addEventListener('click', refazerDistribuicao);
+      const revogar = document.getElementById('ed-dist-revogar');
+      if (revogar) revogar.addEventListener('click', revogarDistribuicaoAuto);
       // Zoom
       const zin = document.getElementById('ed-zoom-in');
       if (zin) zin.addEventListener('click', () => { ES.zoom = Math.min(8, ES.zoom * 1.2); render(); });
