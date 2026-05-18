@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Editor de Plantas · Salas e Auditórios</title>
+<meta name="description" content="Sistema profissional de desenho de plantas de sala — semicircular ou rectangular, totalmente paramétrico.">
+<link rel="icon" href="assets/rsb-brasao.png">
+<style>
+:root {
+  --bg: #0f172a;
+  --bg-2: #1e293b;
+  --bg-3: #334155;
+  --line: #475569;
+  --text: #e2e8f0;
+  --text-mute: #94a3b8;
+  --text-dim: #64748b;
+  --accent: #E30613;
+  --accent-light: #fecdd3;
+  --accent-dark: #9d1c25;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --err: #ef4444;
+  --canvas-bg: #f8fafc;
+  --canvas-grid: #e2e8f0;
+  --seat-free: #cbd5e1;
+  --seat-free-border: #64748b;
+  --seat-reservado: #fde047;
+  --seat-reservado-border: #b45309;
+  --seat-vip: #c084fc;
+  --seat-vip-border: #7c3aed;
+  --seat-ocupado: #60a5fa;
+  --seat-ocupado-border: #1d4ed8;
+  --seat-selected: #ef4444;
+  --seat-selected-border: #b91c1c;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+
+.app { display: grid; grid-template-columns: 320px 1fr 280px; grid-template-rows: 48px 1fr 28px; height: 100vh; }
+@media (max-width: 1100px) { .app { grid-template-columns: 280px 1fr; } .right { display: none; } }
+@media (max-width: 800px) { .app { grid-template-columns: 1fr; grid-template-rows: 48px auto 1fr 28px; } .left { max-height: 40vh; overflow-y: auto; } }
+
+header { grid-column: 1 / -1; background: var(--bg-2); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 16px; gap: 14px; }
+header .logo { display: flex; align-items: center; gap: 9px; font-weight: 800; letter-spacing: 0.02em; }
+header .logo svg { width: 22px; height: 22px; }
+header h1 { font-size: 14px; margin: 0; font-weight: 700; }
+header h1 .tag { font-weight: 400; color: var(--text-mute); margin-left: 6px; font-size: 12px; }
+header .spacer { flex: 1; }
+header .actions { display: flex; gap: 6px; }
+header button, header label.file {
+  background: var(--bg-3); color: var(--text); border: 1px solid var(--line);
+  padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 6px;
+  cursor: pointer; font-family: inherit; transition: background 0.15s;
+}
+header button:hover, header label.file:hover { background: #475569; }
+header button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+header button.primary:hover { background: var(--accent-dark); }
+header label.file input { display: none; }
+
+aside.left {
+  background: var(--bg-2); border-right: 1px solid var(--line); overflow-y: auto;
+  padding: 16px; font-size: 13px;
+}
+aside.left h2 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-mute); font-weight: 700; margin: 16px 0 8px;
+  border-bottom: 1px solid var(--line); padding-bottom: 6px;
+}
+aside.left h2:first-child { margin-top: 0; }
+aside.left .field { margin-bottom: 10px; }
+aside.left .field label { display: block; font-size: 11px; color: var(--text-mute); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+aside.left .row { display: flex; gap: 8px; align-items: center; }
+aside.left input[type=number], aside.left select, aside.left input[type=text] {
+  width: 100%; padding: 6px 8px; background: var(--bg-3); color: var(--text);
+  border: 1px solid var(--line); border-radius: 5px; font-family: inherit; font-size: 13px;
+}
+aside.left input[type=range] { width: 100%; accent-color: var(--accent); }
+aside.left .range-row { display: grid; grid-template-columns: 1fr 56px; gap: 6px; align-items: center; }
+aside.left .range-val { font-size: 12px; text-align: right; color: var(--text-mute); font-variant-numeric: tabular-nums; }
+aside.left .switch-row { display: flex; gap: 8px; }
+aside.left .switch-row button {
+  flex: 1; padding: 8px 6px; font-size: 12px; font-weight: 600;
+  background: var(--bg-3); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+aside.left .switch-row button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+aside.left .help { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.4; }
+aside.left .checkbox-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+aside.left .checkbox-row input { accent-color: var(--accent); }
+aside.left .checkbox-row label { margin: 0; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); font-weight: 400; cursor: pointer; }
+aside.left button.full { width: 100%; padding: 8px; background: var(--bg-3); color: var(--text); border: 1px solid var(--line); border-radius: 6px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+aside.left button.full:hover { background: var(--line); }
+
+main {
+  background: var(--canvas-bg); position: relative; overflow: hidden;
+  background-image:
+    linear-gradient(rgba(148,163,184,0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,0.08) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+main svg { display: block; width: 100%; height: 100%; cursor: grab; }
+main svg.dragging { cursor: grabbing; }
+
+.zoom-controls {
+  position: absolute; right: 14px; top: 14px; display: flex; flex-direction: column; gap: 4px;
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+.zoom-controls button {
+  width: 32px; height: 32px; border: none; background: transparent; cursor: pointer;
+  font-size: 16px; font-weight: 700; border-radius: 4px; color: #334155;
+}
+.zoom-controls button:hover { background: #f1f5f9; }
+.zoom-controls .zoom-level { font-size: 10px; text-align: center; color: var(--text-dim); padding: 2px 0; font-variant-numeric: tabular-nums; }
+
+aside.right {
+  background: var(--bg-2); border-left: 1px solid var(--line); overflow-y: auto;
+  padding: 16px; font-size: 13px;
+}
+aside.right h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-mute); font-weight: 700; margin: 16px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+aside.right h2:first-child { margin-top: 0; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.stat-box { background: var(--bg-3); padding: 10px 12px; border-radius: 6px; border-left: 3px solid var(--accent); }
+.stat-box .v { font-size: 20px; font-weight: 700; line-height: 1.1; }
+.stat-box .l { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+
+.selected-panel { background: var(--bg-3); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; }
+.selected-panel .count { font-weight: 700; color: var(--accent); font-size: 14px; }
+.selected-panel .actions { display: flex; gap: 4px; margin-top: 8px; }
+.selected-panel .actions button {
+  flex: 1; padding: 5px; font-size: 11px; font-weight: 600; border: 1px solid var(--line);
+  background: var(--bg-2); color: var(--text); border-radius: 4px; cursor: pointer; font-family: inherit;
+}
+.selected-panel .actions button:hover { background: var(--line); }
+
+.legend { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.legend .item { display: flex; align-items: center; gap: 8px; }
+.legend .sw { width: 18px; height: 14px; border-radius: 3px; border: 1.5px solid; flex-shrink: 0; }
+.legend .sw.free { background: var(--seat-free); border-color: var(--seat-free-border); }
+.legend .sw.reservado { background: var(--seat-reservado); border-color: var(--seat-reservado-border); }
+.legend .sw.vip { background: var(--seat-vip); border-color: var(--seat-vip-border); }
+.legend .sw.ocupado { background: var(--seat-ocupado); border-color: var(--seat-ocupado-border); }
+.legend .sw.selected { background: var(--seat-selected); border-color: var(--seat-selected-border); }
+
+footer {
+  grid-column: 1 / -1; background: var(--bg-2); border-top: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 16px; gap: 16px; font-size: 11px; color: var(--text-mute);
+}
+footer .status { display: flex; gap: 18px; }
+footer kbd { background: var(--bg-3); padding: 1px 5px; border-radius: 3px; font-size: 10px; font-family: 'SF Mono', Consolas, monospace; border: 1px solid var(--line); color: var(--text); }
+
+.toast { position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%); background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 100; border: 1px solid var(--line); }
+.toast.show { opacity: 1; }
+.toast.ok { border-color: var(--ok); }
+.toast.err { border-color: var(--err); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h2l3-8 4 16 3-10 2 6h4" stroke="#E30613" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h1>Sala Editor <span class="tag">— sistema de plantas</span></h1>
+    </div>
+    <div class="spacer"></div>
+    <div class="actions">
+      <button id="btn-fit" title="Encaixar (F)">⤢ Encaixar</button>
+      <label class="file" title="Importar JSON">
+        ⤓ Importar
+        <input type="file" id="file-import" accept=".json,application/json">
+      </label>
+      <button id="btn-export-json" title="Exportar JSON">⇩ JSON</button>
+      <button id="btn-export-svg" title="Exportar SVG">⇩ SVG</button>
+      <button id="btn-export-png" class="primary" title="Exportar PNG (alta resolução)">⇩ PNG</button>
+    </div>
+  </header>
+
+  <!-- Painel de configuração -->
+  <aside class="left">
+    <h2>Tipo de Sala</h2>
+    <div class="switch-row">
+      <button id="t-auditorio" class="on" data-tipo="auditorio">🎭 Auditório</button>
+      <button id="t-retangular" data-tipo="retangular">🎬 Rectangular</button>
+    </div>
+
+    <h2>Estrutura</h2>
+    <div class="field">
+      <label>Número de filas</label>
+      <div class="range-row">
+        <input type="range" id="p-filas" min="1" max="40" value="12">
+        <span class="range-val" id="v-filas">12</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Lugares por fila (alvo)</label>
+      <div class="range-row">
+        <input type="range" id="p-lugares-fila" min="4" max="60" value="20">
+        <span class="range-val" id="v-lugares-fila">20</span>
+      </div>
+      <div class="help">Em auditório, o número real cresce com o raio para manter espaçamento.</div>
+    </div>
+    <div class="field">
+      <label>Número de corredores</label>
+      <div class="range-row">
+        <input type="range" id="p-corredores" min="0" max="4" value="2">
+        <span class="range-val" id="v-corredores">2</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Largura dos corredores (px)</label>
+      <div class="range-row">
+        <input type="range" id="p-corredor-larg" min="20" max="120" value="50">
+        <span class="range-val" id="v-corredor-larg">50</span>
+      </div>
+    </div>
+
+    <h2>Cadeiras</h2>
+    <div class="field">
+      <label>Tamanho da cadeira (px)</label>
+      <div class="range-row">
+        <input type="range" id="p-seat" min="18" max="60" value="32">
+        <span class="range-val" id="v-seat">32</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Espaço horizontal entre cadeiras (px)</label>
+      <div class="range-row">
+        <input type="range" id="p-gap-h" min="2" max="30" value="6">
+        <span class="range-val" id="v-gap-h">6</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Espaço vertical entre filas (px)</label>
+      <div class="range-row">
+        <input type="range" id="p-gap-v" min="6" max="60" value="14">
+        <span class="range-val" id="v-gap-v">14</span>
+      </div>
+    </div>
+
+    <h2 id="h-curvatura">Auditório</h2>
+    <div class="field" id="f-curvatura">
+      <label>Curvatura (raio inicial)</label>
+      <div class="range-row">
+        <input type="range" id="p-raio" min="80" max="500" value="200">
+        <span class="range-val" id="v-raio">200</span>
+      </div>
+      <div class="help">Distância da primeira fila ao centro do palco.</div>
+    </div>
+    <div class="field" id="f-abertura">
+      <label>Abertura angular máxima (°)</label>
+      <div class="range-row">
+        <input type="range" id="p-abertura" min="60" max="180" value="160">
+        <span class="range-val" id="v-abertura">160</span>
+      </div>
+      <div class="help">Quão "aberto" é o leque das últimas filas.</div>
+    </div>
+
+    <h2>Cena e margens</h2>
+    <div class="checkbox-row">
+      <input type="checkbox" id="p-palco" checked>
+      <label for="p-palco">Mostrar palco / zona frontal</label>
+    </div>
+    <div class="field">
+      <label>Margem da sala (px)</label>
+      <div class="range-row">
+        <input type="range" id="p-margem" min="20" max="200" value="60">
+        <span class="range-val" id="v-margem">60</span>
+      </div>
+    </div>
+
+    <h2>Reservados (R*)</h2>
+    <div class="field">
+      <label>Nº de lugares reservados</label>
+      <div class="range-row">
+        <input type="range" id="p-reservados" min="0" max="20" value="8">
+        <span class="range-val" id="v-reservados">8</span>
+      </div>
+      <div class="help">Anel adicional perto do palco (apenas auditório).</div>
+    </div>
+
+    <h2>Predefinições</h2>
+    <button class="full" id="preset-auditorio">🎭 Auditório 200</button>
+    <button class="full" id="preset-cinema" style="margin-top:6px">🎬 Cinema 150</button>
+    <button class="full" id="preset-teatro" style="margin-top:6px">🎪 Teatro grande</button>
+    <button class="full" id="preset-evento" style="margin-top:6px">🏛️ Conferência</button>
+  </aside>
+
+  <!-- Canvas -->
+  <main id="canvas-wrap">
+    <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="zoom-controls">
+      <button id="btn-zoom-in" title="Mais zoom (+)">+</button>
+      <div class="zoom-level" id="zoom-level">100%</div>
+      <button id="btn-zoom-out" title="Menos zoom (-)">−</button>
+      <button id="btn-zoom-reset" title="Reset (0)" style="font-size:11px">1:1</button>
+    </div>
+  </main>
+
+  <!-- Painel direito -->
+  <aside class="right">
+    <h2>Estatísticas</h2>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="v" id="s-total">0</div><div class="l">Lugares</div></div>
+      <div class="stat-box"><div class="v" id="s-filas">0</div><div class="l">Filas</div></div>
+      <div class="stat-box"><div class="v" id="s-livres">0</div><div class="l">Livres</div></div>
+      <div class="stat-box"><div class="v" id="s-reservados">0</div><div class="l">Reservados</div></div>
+    </div>
+
+    <h2>Selecção</h2>
+    <div class="selected-panel">
+      <div>Lugares seleccionados: <span class="count" id="sel-count">0</span></div>
+      <div id="sel-detail" style="margin-top:6px;font-size:11px;color:var(--text-mute);max-height:80px;overflow-y:auto"></div>
+      <div class="actions">
+        <button id="sel-mark-free">Livre</button>
+        <button id="sel-mark-reservado">Reservado</button>
+        <button id="sel-mark-vip">VIP</button>
+        <button id="sel-clear">Limpar</button>
+      </div>
+    </div>
+
+    <h2>Legenda</h2>
+    <div class="legend">
+      <div class="item"><div class="sw free"></div><div>Livre</div></div>
+      <div class="item"><div class="sw reservado"></div><div>Reservado / R*</div></div>
+      <div class="item"><div class="sw vip"></div><div>VIP</div></div>
+      <div class="item"><div class="sw ocupado"></div><div>Ocupado (com nome)</div></div>
+      <div class="item"><div class="sw selected"></div><div>Seleccionado</div></div>
+    </div>
+  </aside>
+
+  <footer>
+    <div class="status">
+      <span><kbd>Click</kbd> seleccionar</span>
+      <span><kbd>Shift+Click</kbd> múltipla</span>
+      <span><kbd>Wheel</kbd> zoom</span>
+      <span><kbd>Drag</kbd> pan</span>
+      <span><kbd>F</kbd> encaixar</span>
+      <span><kbd>0</kbd> reset</span>
+    </div>
+    <div class="spacer" style="flex:1"></div>
+    <span id="status-msg">Pronto.</span>
+  </footer>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════════════════
+// Configuração default e estado
+// ════════════════════════════════════════════════════════════════════════════
+const DEFAULT_CONFIG = {
+  tipo: 'auditorio',     // 'auditorio' | 'retangular'
+  filas: 12,
+  lugaresPorFila: 20,
+  corredores: 2,
+  corredorLarg: 50,      // px
+  seat: 32,              // px (lado do quadrado)
+  gapH: 6,               // px (entre cadeiras da mesma fila)
+  gapV: 14,              // px (entre filas)
+  raio: 200,             // px (raio inicial do auditório)
+  abertura: 160,         // graus (abertura angular máxima)
+  margem: 60,            // px (margem do canvas)
+  palco: true,
+  reservados: 8          // lugares na fila R (auditório)
+};
+
+const STATE = {
+  config: { ...DEFAULT_CONFIG },
+  rows: [],              // [{label, raio?, slots:[{lugar, x, y, fila, estado}]}]
+  seats: [],             // achatado, com id global
+  aisles: [],            // [{x1,y1,x2,y2}] para rectangular ou {raio, ang0, ang1} para auditório
+  zoom: 1,
+  pan: { x: 0, y: 0 },
+  selected: new Set(),
+  estados: new Map(),    // seatId → 'free'|'reservado'|'vip'|'ocupado'
+  dragging: null,
+  bounds: { w: 1400, h: 900 }
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// Numeração (A, B, C... Z, AA, AB...) — formato Excel
+// ════════════════════════════════════════════════════════════════════════════
+function rowLabel(idx) {
+  let n = idx + 1;
+  let s = '';
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Distribuição em blocos com corredores (proporção igual + ajuste de resto)
+// ════════════════════════════════════════════════════════════════════════════
+function distribuirEmBlocos(n, nBlocos) {
+  if (nBlocos < 1) return [n];
+  const base = Math.floor(n / nBlocos);
+  const resto = n - base * nBlocos;
+  // Distribui o resto privilegiando os blocos centrais
+  const blocos = new Array(nBlocos).fill(base);
+  // Distribui o resto começando pelo bloco central
+  const ordem = [];
+  const meio = Math.floor(nBlocos / 2);
+  for (let d = 0; d <= nBlocos; d++) {
+    if (meio + d < nBlocos) ordem.push(meio + d);
+    if (d > 0 && meio - d >= 0) ordem.push(meio - d);
+  }
+  for (let i = 0; i < resto; i++) blocos[ordem[i % ordem.length]]++;
+  return blocos.filter(b => b > 0);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Geração — modo RECTANGULAR
+// ════════════════════════════════════════════════════════════════════════════
+function generateRectangular(cfg) {
+  const rows = [];
+  const stepH = cfg.seat + cfg.gapH;
+  const stepV = cfg.seat + cfg.gapV;
+  const blocos = distribuirEmBlocos(cfg.lugaresPorFila, cfg.corredores + 1);
+  // Largura total: soma blocos + corredores
+  const larguraLugares = blocos.reduce((a, b) => a + b * stepH, 0) - cfg.gapH;
+  const larguraCorredores = cfg.corredores * cfg.corredorLarg;
+  const larguraTotal = larguraLugares + larguraCorredores;
+  const startX = cfg.margem;
+  const palcoH = cfg.palco ? 80 : 0;
+  const startY = cfg.margem + palcoH + 40;
+
+  const aisles = [];
+  for (let fi = 0; fi < cfg.filas; fi++) {
+    const slots = [];
+    const y = startY + fi * stepV;
+    let x = startX;
+    let nrFila = 1;
+    blocos.forEach((nBloco, bi) => {
+      for (let i = 0; i < nBloco; i++) {
+        slots.push({
+          lugar: nrFila++, fila: rowLabel(fi),
+          x: x + cfg.seat / 2, y: y + cfg.seat / 2
+        });
+        x += stepH;
+      }
+      x -= cfg.gapH; // remove gap final do bloco
+      if (bi < blocos.length - 1) {
+        if (fi === 0) {
+          aisles.push({
+            tipo: 'reto',
+            x: x + cfg.corredorLarg / 2,
+            y0: startY,
+            y1: startY + cfg.filas * stepV,
+            largura: cfg.corredorLarg
+          });
+        }
+        x += cfg.corredorLarg + cfg.gapH;
+      }
+    });
+    rows.push({ label: rowLabel(fi), slots });
+  }
+  const bounds = {
+    w: startX + larguraTotal + cfg.margem,
+    h: startY + cfg.filas * stepV + cfg.margem
+  };
+  return { rows, aisles, bounds, palcoConfig: cfg.palco ? { tipo: 'reto', x: startX, y: cfg.margem, w: larguraTotal, h: palcoH - 10 } : null };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Geração — modo AUDITÓRIO (semicircular, arcos concêntricos)
+// ════════════════════════════════════════════════════════════════════════════
+function generateAuditorio(cfg) {
+  const rows = [];
+  const aisles = [];
+
+  // Centro do palco e geometria base
+  const palcoR = 70;
+  const espacoPalco = cfg.palco ? palcoR + 60 : 20;
+  const raioInicial = cfg.raio;
+  const stepV = cfg.seat + cfg.gapV;
+  const stepArco = cfg.seat + cfg.gapH;       // passo arco constante para evitar sobreposição
+  const corredorRad = (cfg.corredorLarg / Math.max(raioInicial, 80));  // rad equivalente
+
+  // Calcula raio para cada fila + ajusta n para caber sem sobreposição
+  const filas = [];
+  let raioAtual = raioInicial;
+  const aberturaMaxRad = cfg.abertura * Math.PI / 180;
+
+  // Anel R (reservados) — se configurado, fica entre palco e raioInicial
+  if (cfg.reservados > 0 && cfg.tipo === 'auditorio') {
+    const raioR = Math.max(palcoR + 50, raioInicial - 60);
+    filas.push({ label: 'R', raio: raioR, n: cfg.reservados, ehR: true });
+  }
+
+  // Filas A, B, C... — cada uma com n alvo, com cap para não exceder abertura máxima
+  for (let fi = 0; fi < cfg.filas; fi++) {
+    // n cresce ligeiramente com a fila (para "abrir" o leque) mas limitado por abertura
+    const nAlvo = cfg.lugaresPorFila + Math.round(fi * 0.6);
+    // Limita n pelo arco disponível
+    const arcoMax = raioAtual * aberturaMaxRad;
+    const nMaxArco = Math.floor(arcoMax / stepArco) + 1;
+    const n = Math.min(nAlvo, nMaxArco);
+    filas.push({ label: rowLabel(fi), raio: raioAtual, n, ehR: false });
+    raioAtual += stepV;
+  }
+
+  // Centro do palco no espaço — calculado depois com base nos limites
+  const cx = 0; // placeholder, ajustado abaixo
+  const cy = 0;
+
+  // Para cada fila, calcular posições
+  const nBlocos = cfg.corredores + 1;
+  let maxX = 0, minX = 0, maxY = 0;
+
+  filas.forEach(f => {
+    const slots = [];
+    const Krad = stepArco / f.raio; // passo angular constante para gap visual = stepArco
+    const blocos = f.ehR ? [f.n] : distribuirEmBlocos(f.n, nBlocos);
+    // Span total = sum((bloco-1)*Krad) + (nBlocos-1) * corredorRad
+    const spanLugares = blocos.reduce((a, b) => a + (b - 1) * Krad, 0);
+    const spanCorredores = (blocos.length - 1) * corredorRad;
+    const spanTotal = spanLugares + spanCorredores;
+    const inicio = Math.PI / 2 - spanTotal / 2;
+    let nr = 1;
+    let angAtual = inicio;
+    blocos.forEach((nBloco, bi) => {
+      for (let i = 0; i < nBloco; i++) {
+        const x = f.raio * Math.cos(angAtual);
+        const y = f.raio * Math.sin(angAtual);
+        slots.push({
+          lugar: f.ehR ? 'R' + nr : nr,
+          fila: f.label,
+          x, y,
+          angulo: angAtual
+        });
+        nr++;
+        if (i < nBloco - 1) angAtual += Krad;
+      }
+      if (bi < blocos.length - 1) {
+        // adiciona corredor + step
+        angAtual += corredorRad + Krad;
+        // regista corredor (em ângulo médio entre blocos, raio na fronteira interior/exterior)
+        if (f.label === filas[filas.length - 1].label) {
+          // só uma vez (apanha o último; mas queremos para todos)
+        }
+        aisles.push({
+          tipo: 'arco',
+          raio: f.raio,
+          ang0: angAtual - corredorRad,
+          ang1: angAtual
+        });
+      }
+    });
+    f.slots = slots;
+    slots.forEach(s => {
+      maxX = Math.max(maxX, s.x); minX = Math.min(minX, s.x);
+      maxY = Math.max(maxY, s.y);
+    });
+    rows.push({ label: f.label, raio: f.raio, slots });
+  });
+
+  // Ajustar coordenadas: trasladar para o canvas
+  const padding = cfg.margem;
+  const palcoY = padding + (cfg.palco ? palcoR + 30 : 10);
+  const offsetX = padding + (Math.abs(minX)); // origem para cx=0 ficar no centro
+  const offsetY = palcoY + (cfg.palco ? 0 : 30);
+
+  rows.forEach(r => r.slots.forEach(s => { s.x += offsetX; s.y += offsetY; }));
+
+  const cxFinal = offsetX, cyFinal = offsetY;
+  const bounds = { w: cxFinal + maxX + padding, h: offsetY + maxY + padding };
+
+  return {
+    rows,
+    aisles,
+    bounds,
+    centro: { cx: cxFinal, cy: cyFinal },
+    palcoConfig: cfg.palco ? { tipo: 'circular', cx: cxFinal, cy: cyFinal, r: palcoR } : null
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Distribuir lugares em filas (entry point)
+// ════════════════════════════════════════════════════════════════════════════
+function generateLayout() {
+  const cfg = STATE.config;
+  const res = cfg.tipo === 'auditorio' ? generateAuditorio(cfg) : generateRectangular(cfg);
+  // Atribui IDs globais
+  const seats = [];
+  let id = 0;
+  res.rows.forEach(r => r.slots.forEach(s => {
+    s.id = 'S' + id++;
+    s.codigo = String(s.fila) + s.lugar;
+    seats.push(s);
+  }));
+  STATE.rows = res.rows;
+  STATE.aisles = res.aisles;
+  STATE.bounds = res.bounds;
+  STATE.centro = res.centro;
+  STATE.palcoConfig = res.palcoConfig;
+  STATE.seats = seats;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Renderização SVG
+// ════════════════════════════════════════════════════════════════════════════
+function classeEstado(seat) {
+  const est = STATE.estados.get(seat.id);
+  if (STATE.selected.has(seat.id)) return 'selected';
+  if (est) return est;
+  // Default: R = reservado, restante = free
+  if (String(seat.lugar).toString().startsWith('R')) return 'reservado';
+  return 'free';
+}
+function corPorEstado(estado) {
+  switch (estado) {
+    case 'selected': return { fill: 'var(--seat-selected)', stroke: 'var(--seat-selected-border)' };
+    case 'reservado': return { fill: 'var(--seat-reservado)', stroke: 'var(--seat-reservado-border)' };
+    case 'vip': return { fill: 'var(--seat-vip)', stroke: 'var(--seat-vip-border)' };
+    case 'ocupado': return { fill: 'var(--seat-ocupado)', stroke: 'var(--seat-ocupado-border)' };
+    default: return { fill: 'var(--seat-free)', stroke: 'var(--seat-free-border)' };
+  }
+}
+
+function renderPalco(palcoConfig) {
+  if (!palcoConfig) return '';
+  if (palcoConfig.tipo === 'circular') {
+    const { cx, cy, r } = palcoConfig;
+    return `
+      <g class="palco">
+        <circle cx="${cx}" cy="${cy}" r="${r + 12}" fill="#fde4ee" stroke="#be185d" stroke-width="1.5" opacity="0.6"/>
+        <circle cx="${cx}" cy="${cy}" r="${r * 0.62}" fill="#be185d"/>
+        <text x="${cx}" y="${cy + 7}" style="fill:#fff;font-size:24px;font-weight:800;text-anchor:middle">1</text>
+        <text x="${cx}" y="${cy + r + 30}" style="fill:#64748b;font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;text-anchor:middle">Palco · Painel</text>
+      </g>`;
+  }
+  // Rectangular
+  const { x, y, w, h } = palcoConfig;
+  return `
+    <g class="palco">
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="#fde4ee" stroke="#be185d" stroke-width="1.5"/>
+      <text x="${x + w/2}" y="${y + h/2 + 6}" style="fill:#be185d;font-size:18px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;text-anchor:middle">Palco</text>
+    </g>`;
+}
+
+function renderAisles(aisles) {
+  if (!aisles || !aisles.length) return '';
+  // Renderiza corredores rectangulares como áreas claras para indicar passagem
+  return aisles.filter(a => a.tipo === 'reto').map(a => {
+    return `<rect x="${a.x - a.largura/2}" y="${a.y0}" width="${a.largura}" height="${a.y1 - a.y0}" fill="#f1f5f9" opacity="0.7"/>`;
+  }).join('');
+}
+
+function renderRowLabels(rows, centro) {
+  // Letra em ambas as pontas
+  return rows.map(r => {
+    if (!r.slots.length) return '';
+    const sorted = r.slots.slice().sort((a, b) => a.x - b.x);
+    const sEsq = sorted[0], sDir = sorted[sorted.length - 1];
+    const ehR = r.label === 'R';
+    const off = 30;
+    const bg = ehR ? '#fef3c7' : '#f1f5f9';
+    const cor = ehR ? '#b45309' : '#475569';
+    return [{ x: sEsq.x - off, y: sEsq.y }, { x: sDir.x + off, y: sDir.y }].map(p => `
+      <g>
+        <circle cx="${p.x}" cy="${p.y}" r="12" fill="${bg}" stroke="${cor}" stroke-width="1" opacity="0.95"/>
+        <text x="${p.x}" y="${p.y + 4}" style="fill:${cor};font-size:12.5px;font-weight:800;text-anchor:middle">${r.label}</text>
+      </g>
+    `).join('');
+  }).join('');
+}
+
+function renderArcs(rows, centro) {
+  // Arcos curvos (linha de chão) para auditório
+  if (!centro) return '';
+  return rows.map(r => {
+    if (r.slots.length < 2) return '';
+    const raios = r.slots.map(s => Math.hypot(s.x - centro.cx, s.y - centro.cy));
+    const rMedio = raios.reduce((a, b) => a + b, 0) / raios.length + 14;
+    const ang = s => Math.atan2(s.y - centro.cy, s.x - centro.cx);
+    const angs = r.slots.map(ang).sort((a, b) => a - b);
+    const a0 = angs[0] - 0.05, a1 = angs[angs.length - 1] + 0.05;
+    const x1 = centro.cx + rMedio * Math.cos(a0);
+    const y1 = centro.cy + rMedio * Math.sin(a0);
+    const x2 = centro.cx + rMedio * Math.cos(a1);
+    const y2 = centro.cy + rMedio * Math.sin(a1);
+    const large = (a1 - a0) > Math.PI ? 1 : 0;
+    const ehR = r.label === 'R';
+    const cor = ehR ? '#fbbf24' : '#cbd5e1';
+    return `<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${rMedio.toFixed(1)} ${rMedio.toFixed(1)} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${cor}" stroke-width="${ehR ? 1.5 : 1}" opacity="${ehR ? 0.55 : 0.5}"/>`;
+  }).join('');
+}
+
+function renderSeats() {
+  const seatSize = STATE.config.seat;
+  return STATE.seats.map(s => {
+    const cls = classeEstado(s);
+    const { fill, stroke } = corPorEstado(cls);
+    const w = seatSize, h = seatSize * 0.78;
+    const x = s.x - w / 2, y = s.y - h / 2;
+    const ehR = String(s.lugar).startsWith('R');
+    const txt = ehR ? '★' + String(s.lugar).substring(1) : s.lugar;
+    const fontSize = ehR ? Math.max(11, seatSize * 0.32) : Math.max(9, seatSize * 0.28);
+    return `
+      <g class="seat" data-id="${s.id}" data-codigo="${s.codigo}" data-fila="${s.fila}" data-lugar="${s.lugar}">
+        <title>${s.codigo} · ${cls}</title>
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="${cls === 'selected' ? 2.5 : 1.4}" />
+        <text x="${s.x}" y="${s.y + fontSize * 0.36}" text-anchor="middle" style="font-size:${fontSize}px;font-weight:700;pointer-events:none;fill:#1e293b">${txt}</text>
+      </g>`;
+  }).join('');
+}
+
+function render() {
+  generateLayout();
+  const svg = document.getElementById('svg');
+  const { w, h } = STATE.bounds;
+  // Aplica transform (zoom + pan)
+  const vbW = w / STATE.zoom;
+  const vbH = h / STATE.zoom;
+  const vbX = -STATE.pan.x / STATE.zoom;
+  const vbY = -STATE.pan.y / STATE.zoom;
+  svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  let html = '';
+  // Fundo da sala
+  html += `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff" stroke="#cbd5e1" stroke-width="1"/>`;
+  html += renderAisles(STATE.aisles);
+  html += renderPalco(STATE.palcoConfig);
+  html += renderArcs(STATE.rows, STATE.centro);
+  html += renderRowLabels(STATE.rows, STATE.centro);
+  html += renderSeats();
+  svg.innerHTML = html;
+
+  bindSeatClicks();
+  updateStats();
+  document.getElementById('zoom-level').textContent = Math.round(STATE.zoom * 100) + '%';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Click handlers e selecção
+// ════════════════════════════════════════════════════════════════════════════
+function bindSeatClicks() {
+  document.querySelectorAll('.seat').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = el.dataset.id;
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        if (STATE.selected.has(id)) STATE.selected.delete(id);
+        else STATE.selected.add(id);
+      } else {
+        const wasSelected = STATE.selected.has(id) && STATE.selected.size === 1;
+        STATE.selected.clear();
+        if (!wasSelected) STATE.selected.add(id);
+      }
+      render();
+    });
+  });
+}
+
+function updateStats() {
+  const total = STATE.seats.length;
+  const filas = STATE.rows.length;
+  let livres = 0, reservados = 0, vip = 0, ocupados = 0;
+  STATE.seats.forEach(s => {
+    const est = STATE.estados.get(s.id) || (String(s.lugar).startsWith('R') ? 'reservado' : 'free');
+    if (est === 'free') livres++;
+    else if (est === 'reservado') reservados++;
+    else if (est === 'vip') vip++;
+    else if (est === 'ocupado') ocupados++;
+  });
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('s-filas').textContent = filas;
+  document.getElementById('s-livres').textContent = livres;
+  document.getElementById('s-reservados').textContent = reservados + vip;
+  document.getElementById('sel-count').textContent = STATE.selected.size;
+  const sel = Array.from(STATE.selected).slice(0, 20).map(id => {
+    const s = STATE.seats.find(x => x.id === id);
+    return s ? s.codigo : '';
+  }).filter(Boolean).join(', ');
+  document.getElementById('sel-detail').textContent = sel + (STATE.selected.size > 20 ? '…' : '');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Zoom & pan
+// ════════════════════════════════════════════════════════════════════════════
+function initPanZoom() {
+  const svg = document.getElementById('svg');
+  let isDragging = false, startPan = null, startMouse = null;
+
+  svg.addEventListener('mousedown', e => {
+    if (e.target.closest('.seat')) return;
+    isDragging = true;
+    svg.classList.add('dragging');
+    startPan = { ...STATE.pan };
+    startMouse = { x: e.clientX, y: e.clientY };
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - startMouse.x;
+    const dy = e.clientY - startMouse.y;
+    STATE.pan = { x: startPan.x + dx, y: startPan.y + dy };
+    aplicarTransform();
+  });
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+    svg.classList.remove('dragging');
+  });
+
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const delta = -Math.sign(e.deltaY) * 0.1;
+    const oldZoom = STATE.zoom;
+    let newZoom = oldZoom * (1 + delta);
+    newZoom = Math.max(0.2, Math.min(8, newZoom));
+    // Centrar zoom no ponto do rato
+    const rect = svg.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const factor = newZoom / oldZoom;
+    STATE.pan.x = mx - (mx - STATE.pan.x) * factor;
+    STATE.pan.y = my - (my - STATE.pan.y) * factor;
+    STATE.zoom = newZoom;
+    aplicarTransform();
+  }, { passive: false });
+
+  // Atalhos teclado
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'f' || e.key === 'F') { fitToScreen(); e.preventDefault(); }
+    else if (e.key === '0') { STATE.zoom = 1; STATE.pan = { x: 0, y: 0 }; aplicarTransform(); e.preventDefault(); }
+    else if (e.key === '+' || e.key === '=') { STATE.zoom = Math.min(8, STATE.zoom * 1.2); aplicarTransform(); }
+    else if (e.key === '-' || e.key === '_') { STATE.zoom = Math.max(0.2, STATE.zoom / 1.2); aplicarTransform(); }
+    else if (e.key === 'Escape') { STATE.selected.clear(); render(); }
+  });
+}
+
+function aplicarTransform() {
+  const svg = document.getElementById('svg');
+  const { w, h } = STATE.bounds;
+  const vbW = w / STATE.zoom;
+  const vbH = h / STATE.zoom;
+  const vbX = -STATE.pan.x / STATE.zoom;
+  const vbY = -STATE.pan.y / STATE.zoom;
+  svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+  document.getElementById('zoom-level').textContent = Math.round(STATE.zoom * 100) + '%';
+}
+
+function fitToScreen() {
+  const svg = document.getElementById('svg');
+  const rect = svg.getBoundingClientRect();
+  const { w, h } = STATE.bounds;
+  const zX = rect.width / w;
+  const zY = rect.height / h;
+  STATE.zoom = Math.min(zX, zY) * 0.95;
+  STATE.pan = {
+    x: (rect.width - w * STATE.zoom) / 2,
+    y: (rect.height - h * STATE.zoom) / 2
+  };
+  aplicarTransform();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Export / Import
+// ════════════════════════════════════════════════════════════════════════════
+function exportJSON() {
+  const payload = {
+    schema: 'sala-editor@1',
+    geradoEm: new Date().toISOString(),
+    config: STATE.config,
+    bounds: STATE.bounds,
+    palco: STATE.palcoConfig,
+    centro: STATE.centro || null,
+    filas: STATE.rows.map(r => ({
+      label: r.label,
+      raio: r.raio || null,
+      lugares: r.slots.map(s => ({
+        codigo: s.codigo,
+        fila: s.fila,
+        lugar: s.lugar,
+        x: Math.round(s.x * 10) / 10,
+        y: Math.round(s.y * 10) / 10,
+        estado: STATE.estados.get(s.id) || (String(s.lugar).startsWith('R') ? 'reservado' : 'free')
+      }))
+    })),
+    aisles: STATE.aisles
+  };
+  download('planta-sala.json', JSON.stringify(payload, null, 2), 'application/json');
+  toast('JSON exportado.', 'ok');
+}
+
+function importJSON(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (data.config) STATE.config = { ...DEFAULT_CONFIG, ...data.config };
+      // Estados
+      STATE.estados.clear();
+      if (data.filas) {
+        // Regenera com a config nova; depois aplica estados por código
+        atualizarUIFromConfig();
+        render();
+        const codigoMap = new Map();
+        STATE.seats.forEach(s => codigoMap.set(s.codigo, s.id));
+        data.filas.forEach(f => f.lugares.forEach(l => {
+          const id = codigoMap.get(l.codigo);
+          if (id && l.estado && l.estado !== 'free') STATE.estados.set(id, l.estado);
+        }));
+        render();
+      } else {
+        atualizarUIFromConfig();
+        render();
+      }
+      toast('JSON importado.', 'ok');
+    } catch (e) {
+      toast('Erro a ler JSON: ' + e.message, 'err');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function exportSVG() {
+  const svg = document.getElementById('svg');
+  const clone = svg.cloneNode(true);
+  // Substitui variáveis CSS por valores concretos
+  const computed = getComputedStyle(document.body);
+  const mapas = ['seat-free', 'seat-free-border', 'seat-reservado', 'seat-reservado-border', 'seat-vip', 'seat-vip-border', 'seat-ocupado', 'seat-ocupado-border', 'seat-selected', 'seat-selected-border'];
+  let str = new XMLSerializer().serializeToString(clone);
+  mapas.forEach(v => {
+    const val = computed.getPropertyValue('--' + v).trim();
+    str = str.replaceAll(`var(--${v})`, val);
+  });
+  // Adiciona namespace e dimensões
+  const { w, h } = STATE.bounds;
+  str = str.replace('<svg', `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"`);
+  // Força viewBox absoluto
+  str = str.replace(/viewBox="[^"]*"/, `viewBox="0 0 ${w} ${h}"`);
+  download('planta-sala.svg', str, 'image/svg+xml');
+  toast('SVG exportado.', 'ok');
+}
+
+function exportPNG() {
+  const svg = document.getElementById('svg');
+  const computed = getComputedStyle(document.body);
+  const mapas = ['seat-free', 'seat-free-border', 'seat-reservado', 'seat-reservado-border', 'seat-vip', 'seat-vip-border', 'seat-ocupado', 'seat-ocupado-border', 'seat-selected', 'seat-selected-border'];
+  const clone = svg.cloneNode(true);
+  let str = new XMLSerializer().serializeToString(clone);
+  mapas.forEach(v => {
+    const val = computed.getPropertyValue('--' + v).trim();
+    str = str.replaceAll(`var(--${v})`, val);
+  });
+  const { w, h } = STATE.bounds;
+  str = str.replace('<svg', `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"`);
+  str = str.replace(/viewBox="[^"]*"/, `viewBox="0 0 ${w} ${h}"`);
+
+  const scale = 2; // 2x para alta resolução
+  const canvas = document.createElement('canvas');
+  canvas.width = w * scale; canvas.height = h * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const img = new Image();
+  const blob = new Blob([str], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(b => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'planta-sala.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      URL.revokeObjectURL(url);
+      toast('PNG exportado.', 'ok');
+    }, 'image/png');
+  };
+  img.onerror = () => { toast('Erro a gerar PNG.', 'err'); URL.revokeObjectURL(url); };
+  img.src = url;
+}
+
+function download(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+function toast(msg, kind) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// UI Binding
+// ════════════════════════════════════════════════════════════════════════════
+function atualizarUIFromConfig() {
+  const c = STATE.config;
+  document.getElementById('t-auditorio').classList.toggle('on', c.tipo === 'auditorio');
+  document.getElementById('t-retangular').classList.toggle('on', c.tipo === 'retangular');
+  document.getElementById('p-filas').value = c.filas;
+  document.getElementById('v-filas').textContent = c.filas;
+  document.getElementById('p-lugares-fila').value = c.lugaresPorFila;
+  document.getElementById('v-lugares-fila').textContent = c.lugaresPorFila;
+  document.getElementById('p-corredores').value = c.corredores;
+  document.getElementById('v-corredores').textContent = c.corredores;
+  document.getElementById('p-corredor-larg').value = c.corredorLarg;
+  document.getElementById('v-corredor-larg').textContent = c.corredorLarg;
+  document.getElementById('p-seat').value = c.seat;
+  document.getElementById('v-seat').textContent = c.seat;
+  document.getElementById('p-gap-h').value = c.gapH;
+  document.getElementById('v-gap-h').textContent = c.gapH;
+  document.getElementById('p-gap-v').value = c.gapV;
+  document.getElementById('v-gap-v').textContent = c.gapV;
+  document.getElementById('p-raio').value = c.raio;
+  document.getElementById('v-raio').textContent = c.raio;
+  document.getElementById('p-abertura').value = c.abertura;
+  document.getElementById('v-abertura').textContent = c.abertura;
+  document.getElementById('p-margem').value = c.margem;
+  document.getElementById('v-margem').textContent = c.margem;
+  document.getElementById('p-palco').checked = c.palco;
+  document.getElementById('p-reservados').value = c.reservados;
+  document.getElementById('v-reservados').textContent = c.reservados;
+  toggleVisibilidadeAuditorio();
+}
+
+function toggleVisibilidadeAuditorio() {
+  const auditorio = STATE.config.tipo === 'auditorio';
+  document.getElementById('h-curvatura').style.display = auditorio ? '' : 'none';
+  document.getElementById('f-curvatura').style.display = auditorio ? '' : 'none';
+  document.getElementById('f-abertura').style.display = auditorio ? '' : 'none';
+}
+
+function bindControls() {
+  // Tipo
+  document.querySelectorAll('.switch-row button[data-tipo]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      STATE.config.tipo = btn.dataset.tipo;
+      document.querySelectorAll('.switch-row button[data-tipo]').forEach(b => b.classList.toggle('on', b === btn));
+      toggleVisibilidadeAuditorio();
+      STATE.selected.clear();
+      render();
+      fitToScreen();
+    });
+  });
+
+  // Sliders
+  const sliders = [
+    ['p-filas', 'filas', 'v-filas', parseInt],
+    ['p-lugares-fila', 'lugaresPorFila', 'v-lugares-fila', parseInt],
+    ['p-corredores', 'corredores', 'v-corredores', parseInt],
+    ['p-corredor-larg', 'corredorLarg', 'v-corredor-larg', parseInt],
+    ['p-seat', 'seat', 'v-seat', parseInt],
+    ['p-gap-h', 'gapH', 'v-gap-h', parseInt],
+    ['p-gap-v', 'gapV', 'v-gap-v', parseInt],
+    ['p-raio', 'raio', 'v-raio', parseInt],
+    ['p-abertura', 'abertura', 'v-abertura', parseInt],
+    ['p-margem', 'margem', 'v-margem', parseInt],
+    ['p-reservados', 'reservados', 'v-reservados', parseInt]
+  ];
+  sliders.forEach(([id, prop, valId, parser]) => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+      STATE.config[prop] = parser(el.value);
+      document.getElementById(valId).textContent = el.value;
+      render();
+    });
+  });
+
+  // Palco checkbox
+  document.getElementById('p-palco').addEventListener('change', e => {
+    STATE.config.palco = e.target.checked;
+    render();
+  });
+
+  // Acções top
+  document.getElementById('btn-fit').addEventListener('click', fitToScreen);
+  document.getElementById('btn-export-json').addEventListener('click', exportJSON);
+  document.getElementById('btn-export-svg').addEventListener('click', exportSVG);
+  document.getElementById('btn-export-png').addEventListener('click', exportPNG);
+  document.getElementById('file-import').addEventListener('change', e => {
+    if (e.target.files[0]) importJSON(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  // Zoom controls
+  document.getElementById('btn-zoom-in').addEventListener('click', () => { STATE.zoom = Math.min(8, STATE.zoom * 1.2); aplicarTransform(); });
+  document.getElementById('btn-zoom-out').addEventListener('click', () => { STATE.zoom = Math.max(0.2, STATE.zoom / 1.2); aplicarTransform(); });
+  document.getElementById('btn-zoom-reset').addEventListener('click', () => { STATE.zoom = 1; STATE.pan = { x: 0, y: 0 }; aplicarTransform(); });
+
+  // Selecção — marcar estado
+  document.getElementById('sel-mark-free').addEventListener('click', () => { aplicarEstadoSel('free'); });
+  document.getElementById('sel-mark-reservado').addEventListener('click', () => { aplicarEstadoSel('reservado'); });
+  document.getElementById('sel-mark-vip').addEventListener('click', () => { aplicarEstadoSel('vip'); });
+  document.getElementById('sel-clear').addEventListener('click', () => { STATE.selected.clear(); render(); });
+
+  // Predefinições
+  document.getElementById('preset-auditorio').addEventListener('click', () => aplicarPreset(PRESETS.auditorio200));
+  document.getElementById('preset-cinema').addEventListener('click', () => aplicarPreset(PRESETS.cinema150));
+  document.getElementById('preset-teatro').addEventListener('click', () => aplicarPreset(PRESETS.teatroGrande));
+  document.getElementById('preset-evento').addEventListener('click', () => aplicarPreset(PRESETS.conferencia));
+}
+
+function aplicarEstadoSel(estado) {
+  if (!STATE.selected.size) { toast('Selecciona primeiro um ou mais lugares.', 'err'); return; }
+  STATE.selected.forEach(id => {
+    if (estado === 'free') STATE.estados.delete(id);
+    else STATE.estados.set(id, estado);
+  });
+  STATE.selected.clear();
+  render();
+  toast(`Estado actualizado em ${STATE.estados.size} lugar(es).`, 'ok');
+}
+
+function aplicarPreset(p) {
+  STATE.config = { ...DEFAULT_CONFIG, ...p };
+  STATE.estados.clear();
+  STATE.selected.clear();
+  atualizarUIFromConfig();
+  render();
+  fitToScreen();
+  toast('Predefinição aplicada.', 'ok');
+}
+
+const PRESETS = {
+  auditorio200: { tipo: 'auditorio', filas: 12, lugaresPorFila: 14, corredores: 2, corredorLarg: 50, seat: 30, gapH: 8, gapV: 14, raio: 200, abertura: 165, margem: 60, palco: true, reservados: 8 },
+  cinema150: { tipo: 'retangular', filas: 10, lugaresPorFila: 16, corredores: 2, corredorLarg: 40, seat: 28, gapH: 4, gapV: 18, margem: 50, palco: true },
+  teatroGrande: { tipo: 'auditorio', filas: 18, lugaresPorFila: 20, corredores: 3, corredorLarg: 55, seat: 26, gapH: 5, gapV: 12, raio: 220, abertura: 175, margem: 70, palco: true, reservados: 12 },
+  conferencia: { tipo: 'retangular', filas: 8, lugaresPorFila: 12, corredores: 1, corredorLarg: 80, seat: 34, gapH: 10, gapV: 22, margem: 80, palco: true }
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// Inicialização
+// ════════════════════════════════════════════════════════════════════════════
+function init() {
+  atualizarUIFromConfig();
+  bindControls();
+  initPanZoom();
+  render();
+  setTimeout(fitToScreen, 50);
+}
+window.addEventListener('load', init);
+window.addEventListener('resize', () => { fitToScreen(); });
+</script>
+
+</body>
+</html>

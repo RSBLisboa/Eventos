@@ -8,11 +8,12 @@
 //
 // Bump CACHE_VERSION ao alterar o app shell.
 
-const CACHE_VERSION = 'rsb-eventos-v23-mapa-harmonioso';
+const CACHE_VERSION = 'rsb-eventos-v24-sala-editor';
 
 const SHELL = [
   './',
   './index.html',
+  './sala-editor.html',
   './manifest.webmanifest',
   './js/app.js',
   './assets/rsb-brasao.png',
