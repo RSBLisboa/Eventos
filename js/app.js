@@ -3601,10 +3601,19 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
         const e = ST.evento || (ST.evento = eventoDefault());
         if (!e.sala) e.sala = {};
         e.sala.tipo = ES.cfg.tipo;
-        e.sala.layout = ES.seats.map(s => ({ lugar: s.codigo, fila: s.fila, x: Math.round(s.x*10)/10, y: Math.round(s.y*10)/10 }));
+        e.sala.layout = ES.seats.map(s => ({
+          lugar: s.codigo,
+          fila: s.fila,
+          sector: typeof s.sector === 'number' ? s.sector : 0,
+          x: Math.round(s.x*10)/10,
+          y: Math.round(s.y*10)/10
+        }));
         e.sala.lugares = ES.seats.map(s => s.codigo);
         e.sala.totalLugares = ES.seats.length;
         e.sala.viewBox = `0 0 ${Math.ceil(ES.bounds.w)} ${Math.ceil(ES.bounds.h)}`;
+        // Centro do palco e dimensões da cadeira para o mapa público reproduzir o mesmo aspecto
+        e.sala.centro = ES.centro || null;
+        e.sala.palcoConfig = ES.palcoConfig || null;
         e.sala.editorCfg = { ...ES.cfg };
         e.actualizadoEm = nowIso();
         ST.eventoSha = await ghEscreverComRetry(
@@ -3663,6 +3672,7 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
           const val = cont.querySelector('[data-ed-val="' + prop + '"]');
           if (val) val.textContent = el.value;
           render();
+          fitDebounced();
           // Quando muda nº filas, lugares, corredores ou reservados, reconstrói a tabela
           if (['filas', 'lugaresPorFila', 'corredores', 'reservados'].indexOf(prop) >= 0) {
             renderTabelaSetores();
@@ -3670,8 +3680,15 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
         });
       });
       const palcoEl = document.getElementById('ed-cfg-palco');
-      if (palcoEl) palcoEl.addEventListener('change', () => { ES.cfg.palco = palcoEl.checked; render(); });
+      if (palcoEl) palcoEl.addEventListener('change', () => { ES.cfg.palco = palcoEl.checked; render(); fitDebounced(); });
       renderTabelaSetores();
+    }
+
+    // Fit debounced — chamado depois de mudanças à config (50ms para esperar layout estabilizar)
+    let _fitTimer = null;
+    function fitDebounced(ms) {
+      clearTimeout(_fitTimer);
+      _fitTimer = setTimeout(() => fit(), ms || 60);
     }
 
     function fit() {
@@ -4127,6 +4144,20 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       if (aplicarBtn) aplicarBtn.addEventListener('click', aplicarEPublicar);
       // Pan / zoom
       initPanZoom();
+      // Re-fit quando a janela muda (debounced)
+      window.addEventListener('resize', () => {
+        if (ST.activeTab === 'sala' && ES.activado) fitDebounced(120);
+      });
+      // Re-fit também quando a tab Sala fica visível por outras razões (ex: resize do contentor)
+      if (typeof ResizeObserver !== 'undefined') {
+        const wrap = document.getElementById('ed-canvas-wrap');
+        if (wrap) {
+          const ro = new ResizeObserver(() => {
+            if (ST.activeTab === 'sala' && ES.activado) fitDebounced(80);
+          });
+          ro.observe(wrap);
+        }
+      }
     }
 
     function activar() {
@@ -4140,6 +4171,10 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
         ST.inscritos.forEach(i => { if (i.lugar) ES.ocupacoes.set(String(i.lugar), i.id); });
         render();
       }
+      // Múltiplas tentativas de fit (DOM pode não ter dimensões finais no primeiro tick)
+      setTimeout(fit, 30);
+      setTimeout(fit, 120);
+      setTimeout(fit, 300);
     }
 
     return { activar, render, carregar: carregarDoEvento };
