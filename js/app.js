@@ -558,50 +558,73 @@
   }
   function gerarLayoutOval(lugares) {
     const { reservados, numericos } = separarRENumericos(lugares);
-    const cx = 650, cy = 90;
+    const cx = 700, cy = 130;
     const layout = [];
-    // Fila R (mais próxima do palco, arco curto)
-    const rN = reservados.length;
-    if (rN > 0) {
-      const rRad = 130;
-      const rSpan = Math.min(50, 8 * rN);
-      const startRad = Math.PI / 2 - (rSpan * Math.PI / 180) / 2;
-      const step = rN > 1 ? (rSpan * Math.PI / 180) / (rN - 1) : 0;
-      reservados.forEach((lab, i) => {
-        const t = startRad + i * step;
-        layout.push({
-          lugar: lab,
-          x: Math.round((cx + rRad * Math.cos(t)) * 10) / 10,
-          y: Math.round((cy + rRad * Math.sin(t)) * 10) / 10
-        });
-      });
+    const round = v => Math.round(v * 10) / 10;
+    // Distribui n lugares em 3 blocos contíguos (esquerdo, centro, direito).
+    function distribuirBlocos(n) {
+      const e = Math.floor(n / 3);
+      const d = Math.floor(n / 3);
+      return [e, n - e - d, d];
     }
-    // Filas numericas: distribuir progressivamente em arcos maiores
-    const filas = [];
-    const lugaresPorFila = [16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40];
-    let idx = 0, filaIdx = 0;
-    while (idx < numericos.length) {
-      const cap = lugaresPorFila[filaIdx] || 40;
-      const take = Math.min(cap, numericos.length - idx);
-      filas.push(numericos.slice(idx, idx + take));
-      idx += take;
-      filaIdx++;
-    }
-    filas.forEach((fila, i) => {
-      const rad = 175 + i * 45;
-      const spanDeg = Math.min(155, 70 + i * 10);
-      const startRad = Math.PI / 2 - (spanDeg * Math.PI / 180) / 2;
-      const step = fila.length > 1 ? (spanDeg * Math.PI / 180) / (fila.length - 1) : 0;
-      fila.forEach((lab, j) => {
-        const t = startRad + j * step;
+    // Coloca lugares uniformemente dentro de um arco (centrado nas fatias).
+    function colocarBloco(labels, raio, angInicio, angSpan, fila) {
+      const n = labels.length;
+      if (n === 0) return;
+      const stepFatia = angSpan / n;
+      for (let i = 0; i < n; i++) {
+        const t = angInicio + (i + 0.5) * stepFatia;
         layout.push({
-          lugar: lab,
-          x: Math.round((cx + rad * Math.cos(t)) * 10) / 10,
-          y: Math.round((cy + rad * Math.sin(t)) * 10) / 10
+          lugar: labels[i], fila,
+          x: round(cx + raio * Math.cos(t)),
+          y: round(cy + raio * Math.sin(t))
         });
-      });
-    });
-    return { layout, viewBox: '0 0 1300 700' };
+      }
+    }
+    // Fila R: arco contíguo (sem corredor) na frente.
+    if (reservados.length > 0) {
+      const rRad = 165;
+      const rSpanDeg = Math.min(55, 8 * reservados.length);
+      const rSpanRad = rSpanDeg * Math.PI / 180;
+      const inicio = Math.PI / 2 - rSpanRad / 2;
+      colocarBloco(reservados, rRad, inicio, rSpanRad, 'R');
+    }
+    // Configuração das 12 filas numéricas — 192 lugares.
+    // Cada fila divide-se em 3 blocos (esquerdo, centro, direito) com corredor.
+    const config = [
+      { letra: 'A', n: 8, r: 220, spanDeg: 52 },
+      { letra: 'B', n: 10, r: 265, spanDeg: 62 },
+      { letra: 'C', n: 12, r: 310, spanDeg: 72 },
+      { letra: 'D', n: 14, r: 355, spanDeg: 80 },
+      { letra: 'E', n: 14, r: 400, spanDeg: 85 },
+      { letra: 'F', n: 16, r: 445, spanDeg: 92 },
+      { letra: 'G', n: 16, r: 490, spanDeg: 98 },
+      { letra: 'H', n: 18, r: 535, spanDeg: 105 },
+      { letra: 'I', n: 18, r: 580, spanDeg: 112 },
+      { letra: 'J', n: 22, r: 625, spanDeg: 120 },
+      { letra: 'K', n: 22, r: 670, spanDeg: 128 },
+      { letra: 'L', n: 22, r: 715, spanDeg: 138 }
+    ];
+    const corredorDeg = 6;
+    let idx = 0;
+    for (const f of config) {
+      if (idx >= numericos.length) break;
+      const tomar = Math.min(f.n, numericos.length - idx);
+      const filaLabs = numericos.slice(idx, idx + tomar);
+      idx += tomar;
+      const totalRad = f.spanDeg * Math.PI / 180;
+      const corredorRad = corredorDeg * Math.PI / 180;
+      const utilRad = totalRad - 2 * corredorRad;
+      const [nE, nC, nD] = distribuirBlocos(filaLabs.length);
+      const spanE = utilRad * (nE / filaLabs.length);
+      const spanC = utilRad * (nC / filaLabs.length);
+      const spanD = utilRad * (nD / filaLabs.length);
+      const ini = Math.PI / 2 - totalRad / 2;
+      colocarBloco(filaLabs.slice(0, nE), f.r, ini, spanE, f.letra);
+      colocarBloco(filaLabs.slice(nE, nE + nC), f.r, ini + spanE + corredorRad, spanC, f.letra);
+      colocarBloco(filaLabs.slice(nE + nC), f.r, ini + spanE + spanC + 2 * corredorRad, spanD, f.letra);
+    }
+    return { layout, viewBox: '0 0 1400 900' };
   }
   function regenerarLayoutSala() {
     const e = ST.evento || {};
