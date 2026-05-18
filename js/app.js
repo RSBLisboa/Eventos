@@ -3101,7 +3101,11 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     const DEFAULT_CFG = {
       tipo: 'auditorio', filas: 12, lugaresPorFila: 14, corredores: 2,
       corredorLarg: 50, seat: 30, gapH: 8, gapV: 14,
-      raio: 200, abertura: 165, margem: 60, palco: true, reservados: 8
+      raio: 200, abertura: 165, margem: 60, palco: true, reservados: 8,
+      // Configuração avançada por fila/sector. Se definido, sobrepõe a distribuição automática.
+      //   { 'A': [8, 10, 8], 'B': [...], 'R': [8] }   (R não usa corredores)
+      // Use null para usar cálculo automático.
+      setoresPorFila: null
     };
     const PRESETS_ED = {
       aud: { tipo: 'auditorio', filas: 12, lugaresPorFila: 14, corredores: 2, corredorLarg: 50, seat: 30, gapH: 8, gapV: 14, raio: 200, abertura: 165, margem: 60, palco: true, reservados: 8 },
@@ -3159,31 +3163,69 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       return blocos.filter(b => b > 0);
     }
 
+    // Devolve a configuração de sectores para uma fila (override manual ou auto).
+    function getSetoresFila(cfg, label, nDesejado) {
+      const nBlocos = cfg.corredores + 1;
+      const manual = cfg.setoresPorFila && cfg.setoresPorFila[label];
+      if (Array.isArray(manual) && manual.length > 0) {
+        // Normalizar para nBlocos (truncar ou completar com zeros)
+        const arr = manual.slice(0, nBlocos);
+        while (arr.length < nBlocos) arr.push(0);
+        return arr.map(n => Math.max(0, parseInt(n, 10) || 0));
+      }
+      return distribuirBlocosED(nDesejado, nBlocos);
+    }
+
     function gerarRect(cfg) {
       const rows = [], aisles = [];
       const stepH = cfg.seat + cfg.gapH, stepV = cfg.seat + cfg.gapV;
-      const blocos = distribuirBlocosED(cfg.lugaresPorFila, cfg.corredores + 1);
-      const larguraLugares = blocos.reduce((a, b) => a + b * stepH, 0) - cfg.gapH;
-      const larguraTotal = larguraLugares + cfg.corredores * cfg.corredorLarg;
+      // Calcular largura máxima considerando todas as filas (para alinhamento dos corredores)
+      const filasInfo = [];
+      let maxLarguraLugares = 0;
+      for (let fi = 0; fi < cfg.filas; fi++) {
+        const label = rowLab(fi);
+        const blocos = getSetoresFila(cfg, label, cfg.lugaresPorFila);
+        const nTotal = blocos.reduce((a, b) => a + b, 0);
+        const larg = blocos.reduce((a, b) => a + b * stepH, 0) - (nTotal > 0 ? cfg.gapH : 0);
+        filasInfo.push({ label, blocos, larguraLugares: Math.max(0, larg) });
+        maxLarguraLugares = Math.max(maxLarguraLugares, Math.max(0, larg));
+      }
+      const larguraTotal = maxLarguraLugares + cfg.corredores * cfg.corredorLarg;
       const startX = cfg.margem;
       const palcoH = cfg.palco ? 80 : 0;
       const startY = cfg.margem + palcoH + 40;
-      for (let fi = 0; fi < cfg.filas; fi++) {
+      filasInfo.forEach((fi, idx) => {
         const slots = [];
-        const y = startY + fi * stepV;
-        let x = startX, nr = 1;
-        blocos.forEach((nBloco, bi) => {
+        const y = startY + idx * stepV;
+        // Centrar cada fila no espaço total
+        const filaTotal = fi.larguraLugares + cfg.corredores * cfg.corredorLarg;
+        let x = startX + (larguraTotal - filaTotal) / 2;
+        let nr = 1;
+        fi.blocos.forEach((nBloco, bi) => {
           for (let i = 0; i < nBloco; i++) {
-            slots.push({ lugar: nr++, fila: rowLab(fi), x: x + cfg.seat/2, y: y + cfg.seat/2 });
+            slots.push({ lugar: nr++, fila: fi.label, x: x + cfg.seat/2, y: y + cfg.seat/2 });
             x += stepH;
           }
-          x -= cfg.gapH;
-          if (bi < blocos.length - 1) {
-            if (fi === 0) aisles.push({ tipo: 'reto', x: x + cfg.corredorLarg/2, y0: startY, y1: startY + cfg.filas*stepV, largura: cfg.corredorLarg });
+          if (nBloco > 0) x -= cfg.gapH;
+          if (bi < fi.blocos.length - 1) {
             x += cfg.corredorLarg + cfg.gapH;
           }
         });
-        rows.push({ label: rowLab(fi), slots });
+        rows.push({ label: fi.label, slots });
+      });
+      // Corredores: usar a fila com mais lugares para posicionar
+      if (cfg.corredores > 0 && filasInfo.length > 0) {
+        const filaRef = filasInfo.reduce((m, f) => f.larguraLugares > m.larguraLugares ? f : m, filasInfo[0]);
+        const filaTotal = filaRef.larguraLugares + cfg.corredores * cfg.corredorLarg;
+        let x = startX + (larguraTotal - filaTotal) / 2;
+        filaRef.blocos.forEach((nBloco, bi) => {
+          x += nBloco * stepH;
+          if (nBloco > 0) x -= cfg.gapH;
+          if (bi < filaRef.blocos.length - 1) {
+            aisles.push({ tipo: 'reto', x: x + cfg.corredorLarg/2, y0: startY, y1: startY + cfg.filas*stepV, largura: cfg.corredorLarg });
+            x += cfg.corredorLarg + cfg.gapH;
+          }
+        });
       }
       return {
         rows, aisles,
@@ -3203,28 +3245,43 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       const filas = [];
       if (cfg.reservados > 0) {
         const raioR = Math.max(palcoR + 50, cfg.raio - 60);
-        filas.push({ label: 'R', raio: raioR, n: cfg.reservados, ehR: true });
+        const manualR = cfg.setoresPorFila && cfg.setoresPorFila['R'];
+        const nR = Array.isArray(manualR) ? manualR.reduce((a,b) => a + (parseInt(b,10) || 0), 0) : cfg.reservados;
+        filas.push({ label: 'R', raio: raioR, n: nR, ehR: true });
       }
       let raioAtual = cfg.raio;
       for (let fi = 0; fi < cfg.filas; fi++) {
-        const nAlvo = cfg.lugaresPorFila + Math.round(fi * 0.6);
-        const arcoMax = raioAtual * aberturaMaxRad;
-        const nMaxArco = Math.max(2, Math.floor(arcoMax / stepArco) + 1);
-        filas.push({ label: rowLab(fi), raio: raioAtual, n: Math.min(nAlvo, nMaxArco), ehR: false });
+        const label = rowLab(fi);
+        const manualF = cfg.setoresPorFila && cfg.setoresPorFila[label];
+        let nFila;
+        if (Array.isArray(manualF) && manualF.length > 0) {
+          // Total = soma dos sectores manuais
+          nFila = manualF.reduce((a, b) => a + (parseInt(b,10) || 0), 0);
+        } else {
+          const nAlvo = cfg.lugaresPorFila + Math.round(fi * 0.6);
+          const arcoMax = raioAtual * aberturaMaxRad;
+          const nMaxArco = Math.max(2, Math.floor(arcoMax / stepArco) + 1);
+          nFila = Math.min(nAlvo, nMaxArco);
+        }
+        filas.push({ label, raio: raioAtual, n: nFila, ehR: false });
         raioAtual += stepV;
       }
-      const nBlocos = cfg.corredores + 1;
       let minX = 0, maxX = 0, maxY = 0;
       filas.forEach(f => {
         const slots = [];
         const Krad = stepArco / f.raio;
-        const blocos = f.ehR ? [f.n] : distribuirBlocosED(f.n, nBlocos);
-        const spanLug = blocos.reduce((a,b) => a + (b-1) * Krad, 0);
-        const spanCorr = (blocos.length - 1) * corredorRad;
+        const blocos = f.ehR
+          ? (cfg.setoresPorFila && Array.isArray(cfg.setoresPorFila['R'])
+              ? cfg.setoresPorFila['R'].map(n => parseInt(n,10) || 0).filter(n => n > 0)
+              : [f.n])
+          : getSetoresFila(cfg, f.label, f.n);
+        const blocosUsar = blocos.length ? blocos : [f.n];
+        const spanLug = blocosUsar.reduce((a,b) => a + Math.max(0, (b-1)) * Krad, 0);
+        const spanCorr = Math.max(0, blocosUsar.length - 1) * corredorRad;
         const spanTotal = spanLug + spanCorr;
         const ini = Math.PI/2 - spanTotal/2;
         let nr = 1, ang = ini;
-        blocos.forEach((nBloco, bi) => {
+        blocosUsar.forEach((nBloco, bi) => {
           for (let i = 0; i < nBloco; i++) {
             const x = f.raio * Math.cos(ang);
             const y = f.raio * Math.sin(ang);
@@ -3232,8 +3289,8 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
             nr++;
             if (i < nBloco - 1) ang += Krad;
           }
-          if (bi < blocos.length - 1) {
-            ang += corredorRad + Krad;
+          if (bi < blocosUsar.length - 1) {
+            ang += corredorRad + (nBloco > 0 ? Krad : 0);
           }
         });
         slots.forEach(s => { minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x); maxY = Math.max(maxY, s.y); });
@@ -3606,10 +3663,15 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
           const val = cont.querySelector('[data-ed-val="' + prop + '"]');
           if (val) val.textContent = el.value;
           render();
+          // Quando muda nº filas, lugares, corredores ou reservados, reconstrói a tabela
+          if (['filas', 'lugaresPorFila', 'corredores', 'reservados'].indexOf(prop) >= 0) {
+            renderTabelaSetores();
+          }
         });
       });
       const palcoEl = document.getElementById('ed-cfg-palco');
       if (palcoEl) palcoEl.addEventListener('change', () => { ES.cfg.palco = palcoEl.checked; render(); });
+      renderTabelaSetores();
     }
 
     function fit() {
@@ -3764,6 +3826,90 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       reader.readAsText(file);
     }
 
+    // Renderiza tabela editável de lugares por sector/fila.
+    function renderTabelaSetores() {
+      const wrap = document.getElementById('ed-setores-tabela');
+      if (!wrap) return;
+      const nBlocos = ES.cfg.corredores + 1;
+      const labelsBloco = (() => {
+        if (nBlocos === 1) return ['Lugares'];
+        if (nBlocos === 2) return ['Esq', 'Dir'];
+        if (nBlocos === 3) return ['Esq', 'Centro', 'Dir'];
+        const r = [];
+        for (let i = 0; i < nBlocos; i++) r.push('S' + (i + 1));
+        return r;
+      })();
+      // Cabeçalho
+      let html = `<div style="display:grid;grid-template-columns:36px repeat(${nBlocos},1fr) 36px;gap:0;background:#f1f5f9;border-bottom:1px solid var(--linha);padding:5px 6px;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:#475569">
+        <div>Fila</div>
+        ${labelsBloco.map(l => `<div style="text-align:center">${l}</div>`).join('')}
+        <div style="text-align:right">Σ</div>
+      </div>`;
+      // Linha R se aplicável
+      const filasLabels = [];
+      if (ES.cfg.tipo === 'auditorio' && ES.cfg.reservados > 0) filasLabels.push('R');
+      for (let i = 0; i < ES.cfg.filas; i++) filasLabels.push(rowLab(i));
+      // Para cada fila, mostrar inputs
+      filasLabels.forEach((lab, idx) => {
+        const ehR = lab === 'R';
+        const nBlocosFila = ehR ? 1 : nBlocos; // R é sempre contígua
+        const manual = ES.cfg.setoresPorFila && ES.cfg.setoresPorFila[lab];
+        // Valores actuais (manual ou auto)
+        const nAlvo = ehR ? ES.cfg.reservados : ES.cfg.lugaresPorFila + Math.round(idx * 0.6);
+        let blocos = Array.isArray(manual) ? manual.slice(0, nBlocosFila) : (ehR ? [nAlvo] : distribuirBlocosED(nAlvo, nBlocosFila));
+        while (blocos.length < nBlocosFila) blocos.push(0);
+        const total = blocos.reduce((a, b) => a + (parseInt(b,10) || 0), 0);
+        const bg = ehR ? '#fef3c7' : (idx % 2 === 0 ? '#fff' : '#fafafa');
+        const corLetra = ehR ? '#b45309' : '#475569';
+        html += `<div style="display:grid;grid-template-columns:36px repeat(${nBlocos},1fr) 36px;gap:0;padding:4px 6px;border-bottom:1px solid #eee;background:${bg};align-items:center">
+          <div style="font-weight:700;color:${corLetra}">${lab}</div>`;
+        for (let bi = 0; bi < nBlocos; bi++) {
+          if (ehR && bi !== Math.floor(nBlocos/2)) {
+            // Para R, mostrar input apenas no centro (não tem corredores)
+            html += `<div></div>`;
+            continue;
+          }
+          const val = ehR ? blocos[0] : blocos[bi];
+          html += `<input type="number" min="0" max="60" value="${val || ''}" placeholder="${val || ''}" data-ed-setor-lab="${lab}" data-ed-setor-idx="${bi}" style="width:100%;padding:3px 4px;font-size:11px;border:1px solid #cbd5e1;border-radius:3px;font-family:inherit;background:#fff;text-align:center" />`;
+        }
+        html += `<div style="text-align:right;font-weight:700;color:#1e293b;font-variant-numeric:tabular-nums">${total}</div>`;
+        html += `</div>`;
+      });
+      wrap.innerHTML = html;
+      // Listeners — actualizam cfg.setoresPorFila em tempo real
+      wrap.querySelectorAll('input[data-ed-setor-lab]').forEach(input => {
+        input.addEventListener('input', () => {
+          const lab = input.dataset.edSetorLab;
+          const bi = parseInt(input.dataset.edSetorIdx, 10);
+          const ehR = lab === 'R';
+          if (!ES.cfg.setoresPorFila) ES.cfg.setoresPorFila = {};
+          if (!ES.cfg.setoresPorFila[lab]) {
+            // Inicializar com o estado actual (auto ou manual)
+            const nBlocosLocal = ehR ? 1 : (ES.cfg.corredores + 1);
+            const nAlvo = ehR ? ES.cfg.reservados : ES.cfg.lugaresPorFila + Math.round(filasLabels.indexOf(lab) * 0.6);
+            ES.cfg.setoresPorFila[lab] = ehR ? [nAlvo] : distribuirBlocosED(nAlvo, nBlocosLocal);
+          }
+          if (ehR) {
+            ES.cfg.setoresPorFila[lab][0] = parseInt(input.value, 10) || 0;
+          } else {
+            ES.cfg.setoresPorFila[lab][bi] = parseInt(input.value, 10) || 0;
+          }
+        });
+      });
+    }
+
+    function aplicarSetores() {
+      render();
+      setTimeout(() => { renderTabelaSetores(); fit(); }, 30);
+      toast('Configuração de sectores aplicada.', 'ok');
+    }
+    function resetSetoresAuto() {
+      ES.cfg.setoresPorFila = null;
+      render();
+      renderTabelaSetores();
+      toast('Distribuição automática reposta.', 'ok');
+    }
+
     function bindUIOnce() {
       if (ES.iniciaisLoaded) return;
       ES.iniciaisLoaded = true;
@@ -3790,6 +3936,11 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       // Recarregar
       const load = document.getElementById('ed-load-evento');
       if (load) load.addEventListener('click', carregarDoEvento);
+      // Tabela de sectores
+      const apply = document.getElementById('ed-setores-apply');
+      if (apply) apply.addEventListener('click', aplicarSetores);
+      const auto = document.getElementById('ed-setores-auto');
+      if (auto) auto.addEventListener('click', resetSetoresAuto);
       // Zoom
       const zin = document.getElementById('ed-zoom-in');
       if (zin) zin.addEventListener('click', () => { ES.zoom = Math.min(8, ES.zoom * 1.2); render(); });

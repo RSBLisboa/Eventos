@@ -858,6 +858,16 @@
           <button class="btn secondary" id="ed-preset-teatro" style="width:100%;margin-bottom:6px">🎪 Teatro grande</button>
           <button class="btn secondary" id="ed-preset-conf" style="width:100%">🏛️ Conferência</button>
 
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--texto-mute);font-weight:700;margin:16px 0 8px;border-bottom:1px solid var(--linha);padding-bottom:6px">Lugares por sector e fila</div>
+          <div id="ed-setores-info" style="font-size:11px;color:var(--texto-mute);margin-bottom:6px;line-height:1.4">
+            Define quantos lugares por sector em cada fila. Vazio = distribuição automática.
+          </div>
+          <div id="ed-setores-tabela" style="background:#fff;border:1px solid var(--linha);border-radius:5px;max-height:280px;overflow-y:auto;font-size:11.5px"></div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn secondary" id="ed-setores-auto" style="flex:1;padding:6px;font-size:11px">⟲ Auto</button>
+            <button class="btn secondary" id="ed-setores-apply" style="flex:1;padding:6px;font-size:11px">✓ Aplicar</button>
+          </div>
+
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--texto-mute);font-weight:700;margin:16px 0 8px;border-bottom:1px solid var(--linha);padding-bottom:6px">Estado actual</div>
           <button class="btn secondary" id="ed-load-evento" style="width:100%">↻ Recarregar do evento</button>
           <p class="small" style="font-size:11px;color:var(--texto-mute);margin-top:6px;line-height:1.4">Repõe a planta a partir do <code>evento.sala</code> guardado.</p>
