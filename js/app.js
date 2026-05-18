@@ -1490,7 +1490,84 @@
   // ═══════════════════════════════════════════════════════════════════════════
   // PRESENÇAS TAB
   // ═══════════════════════════════════════════════════════════════════════════
+  // Helper unificado de filtragem (busca + categoria + lugar + entidade).
+  // Usado nas tabs Presenças, Emissão e Envio para manter UX consistente com
+  // o filtro avançado da tab Inscritos.
+  function matchInscritoFiltros(i, filtros, extras) {
+    extras = extras || {};
+    const busca = (filtros.busca || '').trim();
+    if (busca) {
+      const q = normalizar(busca);
+      const emailLocal = ST.inscritosAdmin[i.id] || '';
+      const cert = extras.certNumero || '';
+      const ok = normalizar(i.nome || '').includes(q)
+        || normalizar(i.cargo || '').includes(q)
+        || normalizar(i.entidade || '').includes(q)
+        || normalizar(i.email || '').includes(q)
+        || normalizar(emailLocal).includes(q)
+        || normalizar(i.token || '').includes(q)
+        || normalizar(i.categoria || '').includes(q)
+        || normalizar(i.lugar || '').includes(q)
+        || normalizar(cert).includes(q)
+        || String(i.id || '').includes(q);
+      if (!ok) return false;
+    }
+    const cat = filtros.categoria || '';
+    if (cat) {
+      if (cat === '__participante__') {
+        if (i.categoria) return false;
+      } else {
+        if ((i.categoria || '') !== cat) return false;
+      }
+    }
+    const lug = filtros.lugar || '';
+    if (lug === '__com__' && !i.lugar) return false;
+    if (lug === '__sem__' && i.lugar) return false;
+    if (lug === '__r__' && !String(i.lugar || '').toUpperCase().startsWith('R')) return false;
+    const ent = (filtros.entidade || '').trim();
+    if (ent) {
+      const q = normalizar(ent);
+      if (!normalizar(i.entidade || '').includes(q)) return false;
+    }
+    return true;
+  }
+  function listaEntidades() {
+    const s = new Set();
+    for (const i of ST.inscritos) { if (i.entidade) s.add(i.entidade); }
+    return Array.from(s).sort((a,b)=>a.localeCompare(b,'pt-PT'));
+  }
+  // Render datalist partilhado para o autocomplete de entidade (atualizado on-the-fly).
+  function refrescarDatalistEntidades() {
+    const dl = $('datalist-entidades');
+    if (!dl) return;
+    dl.innerHTML = listaEntidades().map(e => '<option value="'+escapeHtml(e)+'">').join('');
+  }
+  // Constrói os controlos UI dos filtros (categoria, lugar, entidade) numa toolbar.
+  function renderToolbarFiltros(prefixo) {
+    return `
+      <select id="${prefixo}-filtro-cat" style="padding:9px 12px;font-size:13px;border:1px solid var(--linha);border-radius:8px;background:#fafafa;font-family:inherit;cursor:pointer">
+        <option value="">Todas as categorias</option>
+        <option value="Organização">Organização</option>
+        <option value="Orador">Orador</option>
+        <option value="Orador Convidado">Orador Convidado</option>
+        <option value="Moderação">Moderação</option>
+        <option value="Coautor do Livreto">Coautor do Livreto</option>
+        <option value="VIP">VIP</option>
+        <option value="Imprensa">Imprensa</option>
+        <option value="__participante__">Sem categoria</option>
+      </select>
+      <select id="${prefixo}-filtro-lugar" style="padding:9px 12px;font-size:13px;border:1px solid var(--linha);border-radius:8px;background:#fafafa;font-family:inherit;cursor:pointer">
+        <option value="">Todos os lugares</option>
+        <option value="__com__">Com lugar</option>
+        <option value="__sem__">Sem lugar</option>
+        <option value="__r__">Só R (VIP)</option>
+      </select>
+      <input list="datalist-entidades" id="${prefixo}-filtro-ent" placeholder="Entidade…" autocomplete="off" style="padding:9px 12px;font-size:13px;border:1px solid var(--linha);border-radius:8px;background:#fafafa;font-family:inherit;min-width:160px">
+    `;
+  }
+
   function renderPresencas() {
+    refrescarDatalistEntidades();
     const presMap = new Map();
     if (ST.presencas && Array.isArray(ST.presencas.marcacoes)) {
       for (const m of ST.presencas.marcacoes) presMap.set(m.idInscricao, m);
@@ -1508,31 +1585,33 @@
     $('pres-n-aus').textContent = aus;
     $('pres-pct').textContent = pct + '%';
 
-    // Aplicar busca
-    let lista = ST.inscritos;
-    const busca = (ST.presencasBusca || '').trim();
-    if (busca) {
-      const q = normalizar(busca);
-      lista = ST.inscritos.filter(i =>
-        normalizar(i.nome || '').includes(q) ||
-        normalizar(i.cargo || '').includes(q) ||
-        normalizar(i.entidade || '').includes(q));
-    }
+    // Filtros unificados
+    const filtros = {
+      busca: ST.presencasBusca || '',
+      categoria: ST.presencasFiltroCat || '',
+      lugar: ST.presencasFiltroLugar || '',
+      entidade: ST.presencasFiltroEnt || ''
+    };
+    const lista = ST.inscritos.filter(i => matchInscritoFiltros(i, filtros));
 
     const linhas = lista.map(i => {
       const m = presMap.get(i.id);
       const presente = m && m.presente;
+      const cat = i.categoria ? pillCategoria(i.categoria) : '';
+      const lugar = i.lugar ? pillLugarHtml(i.lugar) : '';
+      const meta = `${cat} ${lugar}`.trim();
       return `<tr class="hover">
         <td>${escapeHtml(i.nome)}</td>
         <td><span class="small">${escapeHtml(i.cargo || '—')} ${i.entidade ? '· ' + escapeHtml(i.entidade) : ''}</span></td>
+        <td>${meta || '<span class="small" style="color:var(--texto-mute)">—</span>'}</td>
         <td>${presente ? '<span class="pill verde">Presente</span>' : '<span class="pill cinza">—</span>'}</td>
         <td><span class="small mono">${m && m.horaEntrada ? fmtHora(m.horaEntrada) : ''}</span></td>
       </tr>`;
     }).join('');
     $('pres-tabela').innerHTML = `<div style="max-height:480px;overflow:auto;border:1px solid var(--linha);border-radius:6px">
       <table>
-        <thead><tr><th>Nome</th><th>Cargo / Entidade</th><th>Estado</th><th>Hora</th></tr></thead>
-        <tbody>${linhas || '<tr><td colspan="4" style="text-align:center;color:var(--texto-mute);padding:20px">Sem inscritos</td></tr>'}</tbody>
+        <thead><tr><th>Nome</th><th>Cargo / Entidade</th><th style="width:200px">Cat / Lugar</th><th style="width:110px">Estado</th><th style="width:80px">Hora</th></tr></thead>
+        <tbody>${linhas || '<tr><td colspan="5" style="text-align:center;color:var(--texto-mute);padding:20px">Sem inscritos</td></tr>'}</tbody>
       </table></div>`;
   }
 
@@ -1618,19 +1697,17 @@
           ? '⚠️ SECRET ausente em sessão. Preenche na tab Setup (campo SECRET_HASH).'
           : '⚠️ Configura primeiro o evento (título, data) na tab Setup.');
 
-    // Aplicar busca
-    let listaEm = ST.inscritos;
-    const buscaEm = (ST.emissaoBusca || '').trim();
-    if (buscaEm) {
-      const q = normalizar(buscaEm);
-      listaEm = ST.inscritos.filter(i => {
-        const c = certsMap.get(i.id);
-        return normalizar(i.nome || '').includes(q) ||
-          normalizar(i.cargo || '').includes(q) ||
-          normalizar(i.entidade || '').includes(q) ||
-          (c && normalizar(c.numero || '').includes(q));
-      });
-    }
+    // Filtros unificados
+    const filtros = {
+      busca: ST.emissaoBusca || '',
+      categoria: ST.emissaoFiltroCat || '',
+      lugar: ST.emissaoFiltroLugar || '',
+      entidade: ST.emissaoFiltroEnt || ''
+    };
+    const listaEm = ST.inscritos.filter(i => {
+      const c = certsMap.get(i.id);
+      return matchInscritoFiltros(i, filtros, { certNumero: c && c.numero });
+    });
 
     const linhas = listaEm.map(i => {
       const m = presMap.get(i.id);
@@ -1641,15 +1718,19 @@
       else if (c) estadoCol = '<span class="pill verde">' + escapeHtml(c.numero) + '</span>';
       else estadoCol = '<span class="pill amarelo">Por emitir</span>';
       const linkCol = c ? `<a href="${escapeHtml(c.link)}" target="_blank" class="small mono truncate" style="max-width:300px;display:inline-block">${escapeHtml(c.link.substring(0, 60))}…</a>` : '';
+      const cat = i.categoria ? pillCategoria(i.categoria) : '';
+      const lugar = i.lugar ? pillLugarHtml(i.lugar) : '';
+      const meta = `${cat} ${lugar}`.trim();
       return `<tr class="hover">
         <td>${escapeHtml(i.nome)}</td>
+        <td>${meta || '<span class="small" style="color:var(--texto-mute)">—</span>'}</td>
         <td>${estadoCol}</td>
         <td>${linkCol}</td>
       </tr>`;
     }).join('');
     $('emissao-tabela').innerHTML = `<div style="max-height:420px;overflow:auto;border:1px solid var(--linha);border-radius:6px;margin-top:14px">
-      <table><thead><tr><th>Nome</th><th>Certificado</th><th>Link</th></tr></thead>
-      <tbody>${linhas || '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--texto-mute)">Sem inscritos</td></tr>'}</tbody></table></div>`;
+      <table><thead><tr><th>Nome</th><th style="width:200px">Cat / Lugar</th><th style="width:130px">Certificado</th><th>Link</th></tr></thead>
+      <tbody>${linhas || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--texto-mute)">Sem inscritos</td></tr>'}</tbody></table></div>`;
   }
 
   async function emissaoGerar() {
@@ -1803,19 +1884,18 @@
       }
     }
 
-    // Aplicar busca
-    let listaCerts = ST.certificados;
-    const buscaEnv = (ST.envioBusca || '').trim();
-    if (buscaEnv) {
-      const q = normalizar(buscaEnv);
-      listaCerts = ST.certificados.filter(c => {
-        const i = inscritosMap.get(c.idInscricao) || {};
-        const email = ST.inscritosAdmin[c.idInscricao] || i.email || '';
-        return normalizar(i.nome || '').includes(q) ||
-          normalizar(email).includes(q) ||
-          normalizar(c.numero || '').includes(q);
-      });
-    }
+    // Filtros unificados
+    const filtros = {
+      busca: ST.envioBusca || '',
+      categoria: ST.envioFiltroCat || '',
+      lugar: ST.envioFiltroLugar || '',
+      entidade: ST.envioFiltroEnt || ''
+    };
+    const listaCerts = ST.certificados.filter(c => {
+      const i = inscritosMap.get(c.idInscricao);
+      if (!i) return false;
+      return matchInscritoFiltros(i, filtros, { certNumero: c.numero });
+    });
 
     const linhas = listaCerts.map(c => {
       const i = inscritosMap.get(c.idInscricao) || { nome: '?', cargo: '', entidade: '', naoEnviar: false };
@@ -1837,9 +1917,13 @@
           ? '<span class="pill verde">Enviado</span>'
           : '<span class="pill amarelo">Por enviar</span>';
       }
+      const cat = i.categoria ? pillCategoria(i.categoria) : '';
+      const lugar = i.lugar ? pillLugarHtml(i.lugar) : '';
+      const meta = `${cat} ${lugar}`.trim();
       return `<tr class="hover">
         <td><input type="checkbox" class="env-chk" data-id="${c.idInscricao}" ${podeEnviar ? 'checked' : ''} ${podeEnviar ? '' : 'disabled'}></td>
         <td>${escapeHtml(i.nome)}</td>
+        <td>${meta || '<span class="small" style="color:var(--texto-mute)">—</span>'}</td>
         <td><span class="small mono">${escapeHtml(c.numero)}</span></td>
         <td>${colEmail}</td>
         <td>${estadoPill}</td>
@@ -1849,9 +1933,9 @@
       <table>
         <thead><tr>
           <th style="width:32px"><input type="checkbox" id="env-chk-all" checked></th>
-          <th>Nome</th><th>Nº Cert.</th><th>Email</th><th>Estado</th>
+          <th>Nome</th><th style="width:200px">Cat / Lugar</th><th>Nº Cert.</th><th>Email</th><th>Estado</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--texto-mute)">Sem certificados emitidos</td></tr>'}</tbody>
+        <tbody>${linhas || '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--texto-mute)">Sem certificados emitidos</td></tr>'}</tbody>
       </table></div>`;
 
     const all = $('env-chk-all');
@@ -2473,6 +2557,25 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
         b.rerender();
       });
     }
+
+    // Filtros avançados (categoria / lugar / entidade) propagados nas abas Presenças, Emissão e Envio.
+    const tabsFiltros = [
+      { prefixo: 'presencas', stateCat: 'presencasFiltroCat', stateLug: 'presencasFiltroLugar', stateEnt: 'presencasFiltroEnt', rerender: renderPresencas },
+      { prefixo: 'emissao', stateCat: 'emissaoFiltroCat', stateLug: 'emissaoFiltroLugar', stateEnt: 'emissaoFiltroEnt', rerender: renderEmissao },
+      { prefixo: 'envio', stateCat: 'envioFiltroCat', stateLug: 'envioFiltroLugar', stateEnt: 'envioFiltroEnt', rerender: renderEnvio }
+    ];
+    for (const tf of tabsFiltros) {
+      const cont = $(tf.prefixo + '-filtros');
+      if (!cont) continue;
+      cont.innerHTML = renderToolbarFiltros(tf.prefixo);
+      const cat = $(tf.prefixo + '-filtro-cat');
+      const lug = $(tf.prefixo + '-filtro-lugar');
+      const ent = $(tf.prefixo + '-filtro-ent');
+      if (cat) cat.addEventListener('change', () => { ST[tf.stateCat] = cat.value; tf.rerender(); });
+      if (lug) lug.addEventListener('change', () => { ST[tf.stateLug] = lug.value; tf.rerender(); });
+      if (ent) ent.addEventListener('input', () => { ST[tf.stateEnt] = ent.value; tf.rerender(); });
+    }
+    refrescarDatalistEntidades();
 
     // Filtro por categoria na lista de inscritos
     const filtroCat = $('inscritos-filtro-cat');
