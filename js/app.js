@@ -3880,12 +3880,14 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
         });
       }
 
-      // 2. Inscritos a sentar: sem lugar, confirmados
+      // 2. Inscritos a sentar: sem lugar, confirmados, COM nome preenchido
+      // (não atribui lugares a placeholders sem identificação)
       const aSentar = ST.inscritos.filter(i =>
-        !i.lugar && i.estado && /confirm/i.test(i.estado)
+        !i.lugar && i.estado && /confirm/i.test(i.estado) &&
+        i.nome && i.nome.trim().length > 0
       );
       if (!aSentar.length) {
-        toast('Sem inscritos confirmados sem lugar.', 'err');
+        toast('Sem inscritos confirmados (com nome) sem lugar.', 'err');
         render();
         return { atribuidos: 0, naoAtribuidos: 0 };
       }
@@ -3993,7 +3995,10 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     function atualizarStatsAuto() {
       const auto = ST.inscritos.filter(i => i.lugarAuto && i.lugar).length;
       const manual = ST.inscritos.filter(i => i.lugar && !i.lugarAuto).length;
-      const semLugar = ST.inscritos.filter(i => !i.lugar && i.estado && /confirm/i.test(i.estado)).length;
+      // "Por sentar" só conta inscritos confirmados COM nome
+      const semLugar = ST.inscritos.filter(i =>
+        !i.lugar && i.estado && /confirm/i.test(i.estado) && i.nome && i.nome.trim().length > 0
+      ).length;
       const el = document.getElementById('ed-dist-info');
       if (el) {
         el.innerHTML = `<strong style="color:#0e7490">${auto}</strong> automáticos · <strong style="color:#15803d">${manual}</strong> manuais · <strong style="color:#a16207">${semLugar}</strong> por sentar`;
