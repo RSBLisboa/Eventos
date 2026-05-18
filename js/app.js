@@ -558,73 +558,96 @@
   }
   function gerarLayoutOval(lugares) {
     const { reservados, numericos } = separarRENumericos(lugares);
-    const cx = 700, cy = 130;
+    // Centro do palco e parâmetros de design harmonioso:
+    //   - K_PX = passo arco constante entre lugares (mesma distância "linear" para o olho)
+    //   - GAP_FILAS_PX = incremento de raio entre filas (distância vertical equivalente)
+    //   - CORREDOR_RAD = gap entre blocos esquerdo/centro/direito
+    const cx = 700, cy = 145;
+    const K_PX = 40;
+    const GAP_FILAS_PX = 46;
+    const CORREDOR_RAD = 8 * Math.PI / 180;
     const layout = [];
     const round = v => Math.round(v * 10) / 10;
-    // Distribui n lugares em 3 blocos contíguos (esquerdo, centro, direito).
     function distribuirBlocos(n) {
       const e = Math.floor(n / 3);
       const d = Math.floor(n / 3);
       return [e, n - e - d, d];
     }
-    // Coloca lugares uniformemente dentro de um arco (centrado nas fatias).
-    function colocarBloco(labels, raio, angInicio, angSpan, fila) {
-      const n = labels.length;
+    // Coloca uma fila inteira (sem ou com corredores de 3 blocos), garantindo passo
+    // arco constante (K_PX) entre lugares consecutivos dentro de um bloco.
+    function colocarFila(labs, raio, fila, comCorredor) {
+      const n = labs.length;
       if (n === 0) return;
-      const stepFatia = angSpan / n;
-      for (let i = 0; i < n; i++) {
-        const t = angInicio + (i + 0.5) * stepFatia;
-        layout.push({
-          lugar: labels[i], fila,
-          x: round(cx + raio * Math.cos(t)),
-          y: round(cy + raio * Math.sin(t))
-        });
+      const Krad = K_PX / raio;
+      if (!comCorredor || n < 6) {
+        // Linha contígua (caso da fila R ou n pequeno)
+        const spanTotal = (n - 1) * Krad;
+        const ini = Math.PI / 2 - spanTotal / 2;
+        for (let i = 0; i < n; i++) {
+          const t = ini + i * Krad;
+          layout.push({
+            lugar: labs[i], fila,
+            x: round(cx + raio * Math.cos(t)),
+            y: round(cy + raio * Math.sin(t))
+          });
+        }
+        return;
+      }
+      // Com corredores: 3 blocos (E/C/D), passo Krad dentro de cada bloco,
+      // gap CORREDOR_RAD entre o último lugar de um bloco e o primeiro do seguinte.
+      const [nE, nC, nD] = distribuirBlocos(n);
+      // span_total = (n-3) × Krad + 2 × corredorRad
+      const spanTotal = (n - 3) * Krad + 2 * CORREDOR_RAD;
+      const ini = Math.PI / 2 - spanTotal / 2;
+      let pos = 0;
+      // Bloco esquerdo
+      for (let i = 0; i < nE; i++) {
+        const t = ini + i * Krad;
+        layout.push({ lugar: labs[pos++], fila, x: round(cx + raio * Math.cos(t)), y: round(cy + raio * Math.sin(t)) });
+      }
+      // Bloco central
+      const startC = ini + (nE - 1) * Krad + CORREDOR_RAD;
+      for (let i = 0; i < nC; i++) {
+        const t = startC + i * Krad;
+        layout.push({ lugar: labs[pos++], fila, x: round(cx + raio * Math.cos(t)), y: round(cy + raio * Math.sin(t)) });
+      }
+      // Bloco direito
+      const startD = startC + (nC - 1) * Krad + CORREDOR_RAD;
+      for (let i = 0; i < nD; i++) {
+        const t = startD + i * Krad;
+        layout.push({ lugar: labs[pos++], fila, x: round(cx + raio * Math.cos(t)), y: round(cy + raio * Math.sin(t)) });
       }
     }
-    // Fila R: arco contíguo (sem corredor) na frente.
+    // Fila R — arco contíguo no anel interior (sem corredor, espaço dramático ao palco)
     if (reservados.length > 0) {
-      const rRad = 165;
-      const rSpanDeg = Math.min(55, 8 * reservados.length);
-      const rSpanRad = rSpanDeg * Math.PI / 180;
-      const inicio = Math.PI / 2 - rSpanRad / 2;
-      colocarBloco(reservados, rRad, inicio, rSpanRad, 'R');
+      colocarFila(reservados, 180, 'R', false);
     }
-    // Configuração das 12 filas numéricas — 192 lugares.
-    // Cada fila divide-se em 3 blocos (esquerdo, centro, direito) com corredor.
+    // 12 filas numéricas A-L com n crescente — leque harmonioso
+    // n: 8+9+11+12+14+15+17+18+20+21+23+24 = 192
     const config = [
-      { letra: 'A', n: 8, r: 220, spanDeg: 52 },
-      { letra: 'B', n: 10, r: 265, spanDeg: 62 },
-      { letra: 'C', n: 12, r: 310, spanDeg: 72 },
-      { letra: 'D', n: 14, r: 355, spanDeg: 80 },
-      { letra: 'E', n: 14, r: 400, spanDeg: 85 },
-      { letra: 'F', n: 16, r: 445, spanDeg: 92 },
-      { letra: 'G', n: 16, r: 490, spanDeg: 98 },
-      { letra: 'H', n: 18, r: 535, spanDeg: 105 },
-      { letra: 'I', n: 18, r: 580, spanDeg: 112 },
-      { letra: 'J', n: 22, r: 625, spanDeg: 120 },
-      { letra: 'K', n: 22, r: 670, spanDeg: 128 },
-      { letra: 'L', n: 22, r: 715, spanDeg: 138 }
+      { letra: 'A', n: 8 },
+      { letra: 'B', n: 9 },
+      { letra: 'C', n: 11 },
+      { letra: 'D', n: 12 },
+      { letra: 'E', n: 14 },
+      { letra: 'F', n: 15 },
+      { letra: 'G', n: 17 },
+      { letra: 'H', n: 18 },
+      { letra: 'I', n: 20 },
+      { letra: 'J', n: 21 },
+      { letra: 'K', n: 23 },
+      { letra: 'L', n: 24 }
     ];
-    const corredorDeg = 6;
-    let idx = 0;
+    let idx = 0, raioAtual = 230;
     for (const f of config) {
       if (idx >= numericos.length) break;
       const tomar = Math.min(f.n, numericos.length - idx);
       const filaLabs = numericos.slice(idx, idx + tomar);
       idx += tomar;
-      const totalRad = f.spanDeg * Math.PI / 180;
-      const corredorRad = corredorDeg * Math.PI / 180;
-      const utilRad = totalRad - 2 * corredorRad;
-      const [nE, nC, nD] = distribuirBlocos(filaLabs.length);
-      const spanE = utilRad * (nE / filaLabs.length);
-      const spanC = utilRad * (nC / filaLabs.length);
-      const spanD = utilRad * (nD / filaLabs.length);
-      const ini = Math.PI / 2 - totalRad / 2;
-      colocarBloco(filaLabs.slice(0, nE), f.r, ini, spanE, f.letra);
-      colocarBloco(filaLabs.slice(nE, nE + nC), f.r, ini + spanE + corredorRad, spanC, f.letra);
-      colocarBloco(filaLabs.slice(nE + nC), f.r, ini + spanE + spanC + 2 * corredorRad, spanD, f.letra);
+      colocarFila(filaLabs, raioAtual, f.letra, true);
+      raioAtual += GAP_FILAS_PX;
     }
-    return { layout, viewBox: '0 0 1400 900' };
+    return { layout, viewBox: '0 0 1400 920' };
   }
   function regenerarLayoutSala() {
     const e = ST.evento || {};
