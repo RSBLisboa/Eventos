@@ -513,7 +513,108 @@
     const lugaresEl = $('evt-sala-lugares');
     if (nomeEl) nomeEl.value = sala.nome || '';
     if (lugaresEl) lugaresEl.value = lugares.join(', ');
+    const tipoEl = $('evt-sala-tipo-' + (sala.tipo === 'oval' ? 'oval' : 'reto'));
+    if (tipoEl) tipoEl.checked = true;
     renderSalaAtribuicoes();
+  }
+
+  // Geradores de layout: produzem array [{lugar, x, y}, ...] + viewBox.
+  // Recto: 8 filas × 24 colunas + fila R no topo · viewBox 1000×480.
+  // Oval: arcos concêntricos em torno do palco · viewBox 1300×700.
+  function separarRENumericos(lugares) {
+    const reservados = [], numericos = [];
+    for (const l of lugares) {
+      if (String(l).toUpperCase().startsWith('R')) reservados.push(String(l));
+      else numericos.push(String(l));
+    }
+    return { reservados, numericos };
+  }
+  function gerarLayoutReto(lugares) {
+    const { reservados, numericos } = separarRENumericos(lugares);
+    const layout = [];
+    const rN = reservados.length;
+    if (rN > 0) {
+      const rW = 38, rGap = 14;
+      const totalW = rN * rW + (rN - 1) * rGap;
+      const startX = (1000 - totalW) / 2 + rW / 2;
+      reservados.forEach((lab, i) => {
+        layout.push({ lugar: lab, x: Math.round((startX + i * (rW + rGap)) * 10) / 10, y: 85 });
+      });
+    }
+    const nPerRow = 24, gap = 5, w = 30;
+    const totalW = nPerRow * w + (nPerRow - 1) * gap;
+    const startX = (1000 - totalW) / 2 + w / 2;
+    const startY = 140, rowH = 40;
+    numericos.forEach((lab, idx) => {
+      const r = Math.floor(idx / nPerRow);
+      const c = idx % nPerRow;
+      layout.push({
+        lugar: lab,
+        x: Math.round((startX + c * (w + gap)) * 10) / 10,
+        y: startY + r * rowH
+      });
+    });
+    return { layout, viewBox: '0 0 1000 480' };
+  }
+  function gerarLayoutOval(lugares) {
+    const { reservados, numericos } = separarRENumericos(lugares);
+    const cx = 650, cy = 90;
+    const layout = [];
+    // Fila R (mais próxima do palco, arco curto)
+    const rN = reservados.length;
+    if (rN > 0) {
+      const rRad = 130;
+      const rSpan = Math.min(50, 8 * rN);
+      const startRad = Math.PI / 2 - (rSpan * Math.PI / 180) / 2;
+      const step = rN > 1 ? (rSpan * Math.PI / 180) / (rN - 1) : 0;
+      reservados.forEach((lab, i) => {
+        const t = startRad + i * step;
+        layout.push({
+          lugar: lab,
+          x: Math.round((cx + rRad * Math.cos(t)) * 10) / 10,
+          y: Math.round((cy + rRad * Math.sin(t)) * 10) / 10
+        });
+      });
+    }
+    // Filas numericas: distribuir progressivamente em arcos maiores
+    const filas = [];
+    const lugaresPorFila = [16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40];
+    let idx = 0, filaIdx = 0;
+    while (idx < numericos.length) {
+      const cap = lugaresPorFila[filaIdx] || 40;
+      const take = Math.min(cap, numericos.length - idx);
+      filas.push(numericos.slice(idx, idx + take));
+      idx += take;
+      filaIdx++;
+    }
+    filas.forEach((fila, i) => {
+      const rad = 175 + i * 45;
+      const spanDeg = Math.min(155, 70 + i * 10);
+      const startRad = Math.PI / 2 - (spanDeg * Math.PI / 180) / 2;
+      const step = fila.length > 1 ? (spanDeg * Math.PI / 180) / (fila.length - 1) : 0;
+      fila.forEach((lab, j) => {
+        const t = startRad + j * step;
+        layout.push({
+          lugar: lab,
+          x: Math.round((cx + rad * Math.cos(t)) * 10) / 10,
+          y: Math.round((cy + rad * Math.sin(t)) * 10) / 10
+        });
+      });
+    });
+    return { layout, viewBox: '0 0 1300 700' };
+  }
+  function regenerarLayoutSala() {
+    const e = ST.evento || {};
+    if (!e.sala) e.sala = {};
+    const lugares = Array.isArray(e.sala.lugares) ? e.sala.lugares : [];
+    const tipo = e.sala.tipo === 'oval' ? 'oval' : 'reto';
+    const { layout, viewBox } = (tipo === 'oval' ? gerarLayoutOval(lugares) : gerarLayoutReto(lugares));
+    e.sala.tipo = tipo;
+    e.sala.layout = layout;
+    e.sala.viewBox = viewBox;
+    e.sala.totalLugares = lugares.length;
+    ST.evento = e;
+    toast('Layout regenerado: ' + lugares.length + ' lugares (' + tipo + '). Carrega "Guardar configuração" para publicar.', 'ok');
   }
 
   function renderSalaAtribuicoes() {
@@ -592,10 +693,26 @@
       .split(/[,\n]/)
       .map(s => s.trim())
       .filter(Boolean);
+    const tipoOval = $('evt-sala-tipo-oval');
+    const tipo = (tipoOval && tipoOval.checked) ? 'oval' : 'reto';
+    const e = ST.evento || {};
+    const salaAnterior = e.sala || {};
+    const layoutExistente = Array.isArray(salaAnterior.layout) ? salaAnterior.layout : [];
+    const tipoMudou = (salaAnterior.tipo || 'reto') !== tipo;
+    const lugaresMudaram = !Array.isArray(salaAnterior.lugares) || salaAnterior.lugares.join(',') !== lugares.join(',');
+    let layout = layoutExistente, viewBox = salaAnterior.viewBox || '0 0 1000 480';
+    if (!layoutExistente.length || tipoMudou || lugaresMudaram) {
+      const gerado = (tipo === 'oval' ? gerarLayoutOval(lugares) : gerarLayoutReto(lugares));
+      layout = gerado.layout;
+      viewBox = gerado.viewBox;
+    }
     return {
       nome: nomeEl.value.trim(),
+      tipo,
       totalLugares: lugares.length,
-      lugares
+      lugares,
+      layout,
+      viewBox
     };
   }
 
@@ -2514,6 +2631,22 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
         renderSalaAtribuicoes();
       });
     }
+    // Radio buttons do tipo da sala — actualiza tipo + regenera layout em sessão
+    ['evt-sala-tipo-reto', 'evt-sala-tipo-oval'].forEach(id => {
+      const el = $(id);
+      if (el) el.addEventListener('change', () => {
+        if (!ST.evento) ST.evento = {};
+        ST.evento.sala = lerSala();
+        toast('Tipo de sala alterado para "' + ST.evento.sala.tipo + '". Carrega "Guardar configuração" para publicar.', 'ok');
+      });
+    });
+    // Botão regenerar layout (força recálculo)
+    const btnGerar = $('btn-gerar-layout');
+    if (btnGerar) btnGerar.addEventListener('click', () => {
+      if (!ST.evento) ST.evento = {};
+      ST.evento.sala = lerSala();
+      regenerarLayoutSala();
+    });
     $('btn-prog-add').addEventListener('click', () => {
       const actual = lerPrograma();
       actual.push({ hora: '', titulo: '', oradores: '', descricao: '' });

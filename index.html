@@ -618,10 +618,29 @@
           <input type="text" id="evt-sala-nome" placeholder="Ex: Auditório do Metropolitano de Lisboa">
         </div>
         <div class="full">
-          <label>Lugares disponíveis (separados por vírgula ou linha)</label>
-          <textarea id="evt-sala-lugares" rows="3" placeholder="1, 2, 3, ..., 46, R1, R2, ..., R8" style="font-family:'SF Mono',Consolas,monospace;font-size:12.5px"></textarea>
-          <div class="help">Prefixo <code>R</code> = lugar reservado (VIP, destaque amarelo no QR do participante). Os outros aparecem cinza neutro.</div>
+          <label>Disposição da sala</label>
+          <div style="display:flex;gap:18px;align-items:center;padding:8px 0">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0;cursor:pointer">
+              <input type="radio" name="sala-tipo" value="reto" id="evt-sala-tipo-reto">
+              <span>📋 Recto (filas paralelas em grelha)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0;cursor:pointer">
+              <input type="radio" name="sala-tipo" value="oval" id="evt-sala-tipo-oval">
+              <span>⭕ Oval / Anfiteatro (filas curvas)</span>
+            </label>
+          </div>
+          <div class="help">Recto = grelha rectangular (default). Oval = filas curvas concêntricas em torno do palco circular, ao estilo de anfiteatro.</div>
         </div>
+        <div class="full">
+          <label>Lugares disponíveis (separados por vírgula ou linha)</label>
+          <textarea id="evt-sala-lugares" rows="3" placeholder="1, 2, 3, ..., 192, R1, R2, ..., R8" style="font-family:'SF Mono',Consolas,monospace;font-size:12.5px"></textarea>
+          <div class="help">Prefixo <code>R</code> = lugar reservado (VIP, destaque amarelo no mapa e no QR). Os outros aparecem neutros.</div>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn secondary" id="btn-gerar-layout">Regenerar layout do mapa</button>
+        <a class="btn secondary" href="https://rsblisboa.github.io/Presencas/mapa-sala.html" target="_blank" rel="noopener" style="text-decoration:none">↗ Abrir mapa visual</a>
+        <span class="small" style="color:var(--texto-mute)">Lê quantidade e prefixos R* da textarea acima · não apaga atribuições existentes</span>
       </div>
       <div style="margin-top:14px">
         <h3 style="font-size:14px;margin:0 0 8px">Atribuições</h3>
