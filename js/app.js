@@ -3276,7 +3276,10 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
           : getSetoresFila(cfg, f.label, f.n);
         const blocosUsar = blocos.length ? blocos : [f.n];
         const spanLug = blocosUsar.reduce((a,b) => a + Math.max(0, (b-1)) * Krad, 0);
-        const spanCorr = Math.max(0, blocosUsar.length - 1) * corredorRad;
+        // Entre blocos o passo é (corredorRad + Krad) — gap visual do corredor MAIS o passo
+        // angular normal (ang += Krad + corredorRad). Tem que entrar no spanTotal para
+        // a fila ficar SIMÉTRICA em torno de PI/2 (centro do palco).
+        const spanCorr = Math.max(0, blocosUsar.length - 1) * (corredorRad + Krad);
         const spanTotal = spanLug + spanCorr;
         const ini = Math.PI/2 - spanTotal/2;
         let nr = 1, ang = ini;
@@ -3601,6 +3604,22 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
         const e = ST.evento || (ST.evento = eventoDefault());
         if (!e.sala) e.sala = {};
         e.sala.tipo = ES.cfg.tipo;
+        // Re-centrar palco horizontalmente: vbW = 2 × max(distEsq, distDir) + 2*pad.
+        // Garante simetria mesmo com layout assimétrico (corredores, sectores manuais).
+        const _pad = 30;
+        const _xs = ES.seats.map(s => s.x);
+        const _minX = Math.min(..._xs), _maxX = Math.max(..._xs);
+        const _cx0 = (ES.centro && ES.centro.cx) || ((_minX + _maxX) / 2);
+        const _half = Math.max(_cx0 - _minX, _maxX - _cx0) + _pad;
+        const _vbW = Math.ceil(_half * 2);
+        const _vbH = Math.ceil(ES.bounds.h);
+        const _shift = _vbW / 2 - _cx0;
+        if (Math.abs(_shift) > 0.1) {
+          ES.seats.forEach(s => { s.x += _shift; });
+          if (ES.centro) ES.centro.cx += _shift;
+          if (ES.palcoConfig) ES.palcoConfig.cx += _shift;
+          ES.bounds.w = _vbW;
+        }
         e.sala.layout = ES.seats.map(s => ({
           lugar: s.codigo,
           fila: s.fila,
@@ -3610,8 +3629,7 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
         }));
         e.sala.lugares = ES.seats.map(s => s.codigo);
         e.sala.totalLugares = ES.seats.length;
-        e.sala.viewBox = `0 0 ${Math.ceil(ES.bounds.w)} ${Math.ceil(ES.bounds.h)}`;
-        // Centro do palco e dimensões da cadeira para o mapa público reproduzir o mesmo aspecto
+        e.sala.viewBox = `0 0 ${_vbW} ${_vbH}`;
         e.sala.centro = ES.centro || null;
         e.sala.palcoConfig = ES.palcoConfig || null;
         e.sala.editorCfg = { ...ES.cfg };
