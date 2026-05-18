@@ -2563,6 +2563,14 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
 
     const porEnviar = ST.certificados.filter(c => !c.dataEnvioEmail && !c.anulado).length;
     $('badge-envio').textContent = porEnviar;
+
+    const badgeSala = $('badge-sala');
+    if (badgeSala) {
+      const sala = (ST.evento && ST.evento.sala) || {};
+      const totalLug = (sala.layout || sala.lugares || []).length;
+      const atribuidos = ST.inscritos.filter(i => i.lugar).length;
+      badgeSala.textContent = totalLug ? (atribuidos + '/' + totalLug) : '0';
+    }
   }
 
   function activarTab(name) {
@@ -2574,6 +2582,7 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
     if (name === 'presencas') renderPresencas();
     if (name === 'emissao') renderEmissao();
     if (name === 'envio') renderEnvio();
+    if (name === 'sala' && typeof EditorSala !== 'undefined') EditorSala.activar();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -3081,6 +3090,753 @@ substituindo o conteúdo da pasta data/. (Não precisa de restauro do .PRIVADO.)
       `Enviar ${nDestinatarios} certificado(s) em nome de ${nomeCmt}? Esta acção dispara emails reais.`);
     return !!ok;
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EDITOR DE PLANTAS — integrado na tab "Sala"
+  // Reusa ghLer/ghEscreverComRetry para persistir sala (evento.json) e
+  // atribuições (inscritos.json). Estado local independente do ST principal,
+  // sincronizado on-demand via "Aplicar e publicar" e "Recarregar do evento".
+  // ═══════════════════════════════════════════════════════════════════════════
+  const EditorSala = (function() {
+    const DEFAULT_CFG = {
+      tipo: 'auditorio', filas: 12, lugaresPorFila: 14, corredores: 2,
+      corredorLarg: 50, seat: 30, gapH: 8, gapV: 14,
+      raio: 200, abertura: 165, margem: 60, palco: true, reservados: 8
+    };
+    const PRESETS_ED = {
+      aud: { tipo: 'auditorio', filas: 12, lugaresPorFila: 14, corredores: 2, corredorLarg: 50, seat: 30, gapH: 8, gapV: 14, raio: 200, abertura: 165, margem: 60, palco: true, reservados: 8 },
+      cinema: { tipo: 'retangular', filas: 10, lugaresPorFila: 16, corredores: 2, corredorLarg: 40, seat: 28, gapH: 4, gapV: 18, margem: 50, palco: true, reservados: 0 },
+      teatro: { tipo: 'auditorio', filas: 18, lugaresPorFila: 20, corredores: 3, corredorLarg: 55, seat: 26, gapH: 5, gapV: 12, raio: 220, abertura: 175, margem: 70, palco: true, reservados: 12 },
+      conf: { tipo: 'retangular', filas: 8, lugaresPorFila: 12, corredores: 1, corredorLarg: 80, seat: 34, gapH: 10, gapV: 22, margem: 80, palco: true, reservados: 0 }
+    };
+    const SLIDERS = [
+      ['filas', 'Número de filas', 1, 40, 1],
+      ['lugaresPorFila', 'Lugares por fila (alvo)', 4, 60, 1],
+      ['corredores', 'Número de corredores', 0, 4, 1],
+      ['corredorLarg', 'Largura dos corredores (px)', 20, 120, 1],
+      ['seat', 'Tamanho da cadeira (px)', 18, 60, 1],
+      ['gapH', 'Espaço horizontal (px)', 2, 30, 1],
+      ['gapV', 'Espaço vertical (px)', 6, 60, 1],
+      ['raio', 'Curvatura — raio inicial (px)', 80, 500, 5, 'auditorio'],
+      ['abertura', 'Abertura angular máx. (°)', 60, 180, 1, 'auditorio'],
+      ['margem', 'Margem (px)', 20, 200, 5],
+      ['reservados', 'Lugares reservados (R*)', 0, 20, 1, 'auditorio']
+    ];
+
+    const ES = {
+      cfg: { ...DEFAULT_CFG },
+      rows: [], seats: [], aisles: [], bounds: { w: 1400, h: 900 },
+      centro: null, palcoConfig: null,
+      selected: new Set(),
+      estados: new Map(),       // seatId → 'reservado'|'vip'|'ocupado'|'free'
+      ocupacoes: new Map(),     // codigo (A1, R5) → idInscrito
+      zoom: 1, pan: { x: 0, y: 0 },
+      activado: false,
+      iniciaisLoaded: false
+    };
+
+    function rowLab(idx) {
+      let n = idx + 1, s = '';
+      while (n > 0) {
+        const r = (n - 1) % 26;
+        s = String.fromCharCode(65 + r) + s;
+        n = Math.floor((n - 1) / 26);
+      }
+      return s;
+    }
+    function distribuirBlocosED(n, nBlocos) {
+      if (nBlocos < 1) return [n];
+      const base = Math.floor(n / nBlocos);
+      const resto = n - base * nBlocos;
+      const blocos = new Array(nBlocos).fill(base);
+      const meio = Math.floor(nBlocos / 2);
+      const ordem = [];
+      for (let d = 0; d <= nBlocos; d++) {
+        if (meio + d < nBlocos) ordem.push(meio + d);
+        if (d > 0 && meio - d >= 0) ordem.push(meio - d);
+      }
+      for (let i = 0; i < resto; i++) blocos[ordem[i % ordem.length]]++;
+      return blocos.filter(b => b > 0);
+    }
+
+    function gerarRect(cfg) {
+      const rows = [], aisles = [];
+      const stepH = cfg.seat + cfg.gapH, stepV = cfg.seat + cfg.gapV;
+      const blocos = distribuirBlocosED(cfg.lugaresPorFila, cfg.corredores + 1);
+      const larguraLugares = blocos.reduce((a, b) => a + b * stepH, 0) - cfg.gapH;
+      const larguraTotal = larguraLugares + cfg.corredores * cfg.corredorLarg;
+      const startX = cfg.margem;
+      const palcoH = cfg.palco ? 80 : 0;
+      const startY = cfg.margem + palcoH + 40;
+      for (let fi = 0; fi < cfg.filas; fi++) {
+        const slots = [];
+        const y = startY + fi * stepV;
+        let x = startX, nr = 1;
+        blocos.forEach((nBloco, bi) => {
+          for (let i = 0; i < nBloco; i++) {
+            slots.push({ lugar: nr++, fila: rowLab(fi), x: x + cfg.seat/2, y: y + cfg.seat/2 });
+            x += stepH;
+          }
+          x -= cfg.gapH;
+          if (bi < blocos.length - 1) {
+            if (fi === 0) aisles.push({ tipo: 'reto', x: x + cfg.corredorLarg/2, y0: startY, y1: startY + cfg.filas*stepV, largura: cfg.corredorLarg });
+            x += cfg.corredorLarg + cfg.gapH;
+          }
+        });
+        rows.push({ label: rowLab(fi), slots });
+      }
+      return {
+        rows, aisles,
+        bounds: { w: startX + larguraTotal + cfg.margem, h: startY + cfg.filas * stepV + cfg.margem },
+        centro: null,
+        palcoConfig: cfg.palco ? { tipo: 'reto', x: startX, y: cfg.margem, w: larguraTotal, h: palcoH - 10 } : null
+      };
+    }
+
+    function gerarAud(cfg) {
+      const rows = [], aisles = [];
+      const palcoR = 70;
+      const stepV = cfg.seat + cfg.gapV;
+      const stepArco = cfg.seat + cfg.gapH;
+      const corredorRad = cfg.corredorLarg / Math.max(cfg.raio, 80);
+      const aberturaMaxRad = cfg.abertura * Math.PI / 180;
+      const filas = [];
+      if (cfg.reservados > 0) {
+        const raioR = Math.max(palcoR + 50, cfg.raio - 60);
+        filas.push({ label: 'R', raio: raioR, n: cfg.reservados, ehR: true });
+      }
+      let raioAtual = cfg.raio;
+      for (let fi = 0; fi < cfg.filas; fi++) {
+        const nAlvo = cfg.lugaresPorFila + Math.round(fi * 0.6);
+        const arcoMax = raioAtual * aberturaMaxRad;
+        const nMaxArco = Math.max(2, Math.floor(arcoMax / stepArco) + 1);
+        filas.push({ label: rowLab(fi), raio: raioAtual, n: Math.min(nAlvo, nMaxArco), ehR: false });
+        raioAtual += stepV;
+      }
+      const nBlocos = cfg.corredores + 1;
+      let minX = 0, maxX = 0, maxY = 0;
+      filas.forEach(f => {
+        const slots = [];
+        const Krad = stepArco / f.raio;
+        const blocos = f.ehR ? [f.n] : distribuirBlocosED(f.n, nBlocos);
+        const spanLug = blocos.reduce((a,b) => a + (b-1) * Krad, 0);
+        const spanCorr = (blocos.length - 1) * corredorRad;
+        const spanTotal = spanLug + spanCorr;
+        const ini = Math.PI/2 - spanTotal/2;
+        let nr = 1, ang = ini;
+        blocos.forEach((nBloco, bi) => {
+          for (let i = 0; i < nBloco; i++) {
+            const x = f.raio * Math.cos(ang);
+            const y = f.raio * Math.sin(ang);
+            slots.push({ lugar: f.ehR ? 'R' + nr : nr, fila: f.label, x, y });
+            nr++;
+            if (i < nBloco - 1) ang += Krad;
+          }
+          if (bi < blocos.length - 1) {
+            ang += corredorRad + Krad;
+          }
+        });
+        slots.forEach(s => { minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x); maxY = Math.max(maxY, s.y); });
+        rows.push({ label: f.label, raio: f.raio, slots });
+      });
+      const pad = cfg.margem;
+      const palcoY = pad + (cfg.palco ? palcoR + 30 : 10);
+      const offX = pad + Math.abs(minX);
+      const offY = palcoY + (cfg.palco ? 0 : 30);
+      rows.forEach(r => r.slots.forEach(s => { s.x += offX; s.y += offY; }));
+      return {
+        rows, aisles,
+        bounds: { w: offX + maxX + pad, h: offY + maxY + pad },
+        centro: { cx: offX, cy: offY },
+        palcoConfig: cfg.palco ? { tipo: 'circular', cx: offX, cy: offY, r: palcoR } : null
+      };
+    }
+
+    function gerarLayoutED() {
+      const cfg = ES.cfg;
+      const res = cfg.tipo === 'auditorio' ? gerarAud(cfg) : gerarRect(cfg);
+      let id = 0;
+      const seats = [];
+      res.rows.forEach(r => r.slots.forEach(s => {
+        s.id = 'S' + id++;
+        s.codigo = String(s.fila) + s.lugar;
+        seats.push(s);
+      }));
+      ES.rows = res.rows; ES.aisles = res.aisles; ES.bounds = res.bounds;
+      ES.centro = res.centro; ES.palcoConfig = res.palcoConfig; ES.seats = seats;
+    }
+
+    function estadoDoLugar(s) {
+      // Prioridade: selected > estado explícito > ocupação por inscrito > default
+      if (ES.selected.has(s.id)) return 'selected';
+      const e = ES.estados.get(s.id);
+      if (e) return e;
+      if (ES.ocupacoes.has(s.codigo)) return 'ocupado';
+      if (String(s.lugar).toString().startsWith('R')) return 'reservado';
+      return 'free';
+    }
+    function corEstado(e) {
+      switch (e) {
+        case 'selected':   return { fill: '#ef4444', stroke: '#b91c1c' };
+        case 'reservado':  return { fill: '#fde047', stroke: '#b45309' };
+        case 'vip':        return { fill: '#c084fc', stroke: '#7c3aed' };
+        case 'ocupado':    return { fill: '#60a5fa', stroke: '#1d4ed8' };
+        default:           return { fill: '#cbd5e1', stroke: '#64748b' };
+      }
+    }
+
+    function renderPalco() {
+      if (!ES.palcoConfig) return '';
+      if (ES.palcoConfig.tipo === 'circular') {
+        const { cx, cy, r } = ES.palcoConfig;
+        return `
+          <g>
+            <circle cx="${cx}" cy="${cy}" r="${r+12}" fill="#fde4ee" stroke="#be185d" stroke-width="1.5" opacity="0.6"/>
+            <circle cx="${cx}" cy="${cy}" r="${r*0.62}" fill="#be185d"/>
+            <text x="${cx}" y="${cy+7}" style="fill:#fff;font-size:22px;font-weight:800;text-anchor:middle">1</text>
+            <text x="${cx}" y="${cy+r+30}" style="fill:#64748b;font-size:10.5px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;text-anchor:middle">Palco · Painel</text>
+          </g>`;
+      }
+      const { x, y, w, h } = ES.palcoConfig;
+      return `
+        <g>
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="#fde4ee" stroke="#be185d" stroke-width="1.5"/>
+          <text x="${x+w/2}" y="${y+h/2+6}" style="fill:#be185d;font-size:16px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;text-anchor:middle">Palco</text>
+        </g>`;
+    }
+    function renderAisles() {
+      return (ES.aisles || []).filter(a => a.tipo === 'reto').map(a =>
+        `<rect x="${a.x - a.largura/2}" y="${a.y0}" width="${a.largura}" height="${a.y1 - a.y0}" fill="#f1f5f9" opacity="0.7"/>`
+      ).join('');
+    }
+    function renderArcos() {
+      if (!ES.centro) return '';
+      return ES.rows.map(r => {
+        if (r.slots.length < 2) return '';
+        const raios = r.slots.map(s => Math.hypot(s.x - ES.centro.cx, s.y - ES.centro.cy));
+        const rMed = raios.reduce((a,b) => a+b, 0)/raios.length + 14;
+        const ang = s => Math.atan2(s.y - ES.centro.cy, s.x - ES.centro.cx);
+        const angs = r.slots.map(ang).sort((a,b) => a-b);
+        const a0 = angs[0] - 0.05, a1 = angs[angs.length-1] + 0.05;
+        const x1 = ES.centro.cx + rMed * Math.cos(a0);
+        const y1 = ES.centro.cy + rMed * Math.sin(a0);
+        const x2 = ES.centro.cx + rMed * Math.cos(a1);
+        const y2 = ES.centro.cy + rMed * Math.sin(a1);
+        const large = (a1 - a0) > Math.PI ? 1 : 0;
+        const ehR = r.label === 'R';
+        const cor = ehR ? '#fbbf24' : '#cbd5e1';
+        return `<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${rMed.toFixed(1)} ${rMed.toFixed(1)} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${cor}" stroke-width="${ehR ? 1.5 : 1}" opacity="0.5"/>`;
+      }).join('');
+    }
+    function renderLetras() {
+      return ES.rows.map(r => {
+        if (!r.slots.length) return '';
+        const sorted = r.slots.slice().sort((a,b) => a.x - b.x);
+        const sEsq = sorted[0], sDir = sorted[sorted.length-1];
+        const ehR = r.label === 'R', off = 30;
+        const bg = ehR ? '#fef3c7' : '#f1f5f9';
+        const cor = ehR ? '#b45309' : '#475569';
+        return [{x: sEsq.x - off, y: sEsq.y}, {x: sDir.x + off, y: sDir.y}].map(p => `
+          <g>
+            <circle cx="${p.x}" cy="${p.y}" r="11" fill="${bg}" stroke="${cor}" stroke-width="0.8" opacity="0.95"/>
+            <text x="${p.x}" y="${p.y+4}" style="fill:${cor};font-size:11.5px;font-weight:800;text-anchor:middle">${r.label}</text>
+          </g>
+        `).join('');
+      }).join('');
+    }
+    function renderSeats() {
+      const s_ = ES.cfg.seat;
+      return ES.seats.map(s => {
+        const e = estadoDoLugar(s);
+        const c = corEstado(e);
+        const w = s_, h = s_ * 0.78;
+        const x = s.x - w/2, y = s.y - h/2;
+        const ehR = String(s.lugar).startsWith('R');
+        const txt = ehR ? '★' + String(s.lugar).substring(1) : s.lugar;
+        const fs = ehR ? Math.max(11, s_*0.32) : Math.max(9, s_*0.28);
+        const idInsc = ES.ocupacoes.get(s.codigo);
+        const insc = idInsc ? (ST.inscritos.find(i => i.id === idInsc)) : null;
+        const titleTxt = s.codigo + (insc ? ' · ' + insc.nome : ' · ' + e);
+        return `
+          <g class="ed-seat" data-id="${s.id}" data-codigo="${s.codigo}">
+            <title>${escapeHtml(titleTxt)}</title>
+            <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${c.fill}" stroke="${c.stroke}" stroke-width="${e === 'selected' ? 2.5 : 1.4}" style="cursor:pointer"/>
+            <text x="${s.x}" y="${s.y + fs*0.36}" text-anchor="middle" style="font-size:${fs}px;font-weight:700;pointer-events:none;fill:#1e293b">${escapeHtml(String(txt))}</text>
+          </g>`;
+      }).join('');
+    }
+
+    function render() {
+      gerarLayoutED();
+      const svg = document.getElementById('ed-svg');
+      if (!svg) return;
+      const { w, h } = ES.bounds;
+      const vbW = w / ES.zoom, vbH = h / ES.zoom;
+      const vbX = -ES.pan.x / ES.zoom, vbY = -ES.pan.y / ES.zoom;
+      svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      let html = `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff" stroke="#e5e5e5" stroke-width="1"/>`;
+      html += renderAisles();
+      html += renderPalco();
+      html += renderArcos();
+      html += renderLetras();
+      html += renderSeats();
+      svg.innerHTML = html;
+      bindCliquesLugares();
+      atualizarStats();
+      const zEl = document.getElementById('ed-zoom-level');
+      if (zEl) zEl.textContent = Math.round(ES.zoom * 100) + '%';
+    }
+
+    function bindCliquesLugares() {
+      document.querySelectorAll('.ed-seat').forEach(el => {
+        el.addEventListener('click', e => {
+          e.stopPropagation();
+          const id = el.dataset.id;
+          if (e.shiftKey || e.ctrlKey || e.metaKey) {
+            if (ES.selected.has(id)) ES.selected.delete(id);
+            else ES.selected.add(id);
+          } else {
+            const era = ES.selected.has(id) && ES.selected.size === 1;
+            ES.selected.clear();
+            if (!era) ES.selected.add(id);
+          }
+          render();
+          atualizarPainelSentar();
+        });
+      });
+    }
+
+    function atualizarStats() {
+      const total = ES.seats.length;
+      const filas = ES.rows.length;
+      let livres = 0, ocupados = 0;
+      ES.seats.forEach(s => {
+        const e = estadoDoLugar(s);
+        if (e === 'free') livres++;
+        else if (e === 'ocupado') ocupados++;
+      });
+      const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      setEl('ed-s-total', total);
+      setEl('ed-s-filas', filas);
+      setEl('ed-s-livres', livres);
+      setEl('ed-s-ocupados', ocupados);
+      setEl('ed-sel-count', ES.selected.size);
+      const det = Array.from(ES.selected).slice(0, 20).map(id => {
+        const s = ES.seats.find(x => x.id === id);
+        return s ? s.codigo : '';
+      }).filter(Boolean).join(', ');
+      const detEl = document.getElementById('ed-sel-detail');
+      if (detEl) detEl.textContent = det + (ES.selected.size > 20 ? '…' : '');
+    }
+
+    function atualizarPainelSentar() {
+      const painel = document.getElementById('ed-sentar-panel');
+      if (!painel) return;
+      // Mostra o painel sentar se exactamente UM lugar livre ou já ocupado está seleccionado
+      if (ES.selected.size !== 1) { painel.style.display = 'none'; return; }
+      const id = Array.from(ES.selected)[0];
+      const s = ES.seats.find(x => x.id === id);
+      if (!s) { painel.style.display = 'none'; return; }
+      painel.style.display = '';
+      const busca = (document.getElementById('ed-sentar-busca') || {}).value || '';
+      const idAtual = ES.ocupacoes.get(s.codigo);
+      const semLugar = ST.inscritos.filter(i => {
+        if (!i.lugar) return true;
+        // Permitir mostrar quem já está neste lugar para "trocar"
+        return i.id === idAtual;
+      });
+      const q = normalizar(busca);
+      const filtr = q
+        ? semLugar.filter(i => normalizar(i.nome).includes(q) || normalizar(i.cargo||'').includes(q) || normalizar(i.entidade||'').includes(q))
+        : semLugar;
+      const lista = document.getElementById('ed-sentar-lista');
+      if (!lista) return;
+      lista.innerHTML = '';
+      // Cabeçalho: lugar + acção remover (se já ocupado)
+      const cab = document.createElement('div');
+      cab.style.cssText = 'padding:8px 10px;background:#fff;border-bottom:1px solid var(--linha);font-size:11.5px;display:flex;justify-content:space-between;align-items:center';
+      cab.innerHTML = `<strong>${escapeHtml(s.codigo)}</strong>` + (idAtual ? '<button class="btn secondary" style="padding:3px 8px;font-size:11px" id="ed-remover-aqui">Libertar</button>' : '');
+      lista.appendChild(cab);
+      const rem = document.getElementById('ed-remover-aqui');
+      if (rem) rem.addEventListener('click', () => marcarOcupacao(s.codigo, null));
+      if (filtr.length === 0) {
+        const v = document.createElement('div');
+        v.style.cssText = 'padding:10px;color:#888;text-align:center;font-size:12px';
+        v.textContent = 'Sem resultados.';
+        lista.appendChild(v);
+        return;
+      }
+      filtr.slice(0, 80).forEach(i => {
+        const item = document.createElement('div');
+        const ehAtual = i.id === idAtual;
+        item.style.cssText = 'padding:7px 10px;border-bottom:1px solid #eee;cursor:pointer;font-size:12px;' + (ehAtual ? 'background:#fef3c7' : 'background:#fff');
+        item.innerHTML = `<div style="font-weight:600">${escapeHtml(i.nome)}${ehAtual ? ' ✓' : ''}</div><div style="font-size:10.5px;color:#888">${escapeHtml((i.cargo || '') + (i.entidade ? ' · ' + i.entidade : ''))}</div>`;
+        item.addEventListener('mouseenter', () => item.style.background = ehAtual ? '#fde68a' : '#f1f5f9');
+        item.addEventListener('mouseleave', () => item.style.background = ehAtual ? '#fef3c7' : '#fff');
+        item.addEventListener('click', () => marcarOcupacao(s.codigo, i.id));
+        lista.appendChild(item);
+      });
+    }
+
+    function marcarOcupacao(codigo, idInscrito) {
+      // Limpa qualquer ocupação anterior deste lugar
+      const idAnterior = ES.ocupacoes.get(codigo);
+      if (idAnterior) {
+        const ant = ST.inscritos.find(i => i.id === idAnterior);
+        if (ant) delete ant.lugar;
+        ES.ocupacoes.delete(codigo);
+      }
+      // Limpa qualquer ocupação anterior deste inscrito noutro lugar
+      if (idInscrito) {
+        const novo = ST.inscritos.find(i => i.id === idInscrito);
+        if (!novo) { toast('Inscrito não encontrado.', 'err'); return; }
+        if (novo.lugar) {
+          ES.ocupacoes.delete(String(novo.lugar));
+        }
+        novo.lugar = codigo;
+        ES.ocupacoes.set(codigo, idInscrito);
+      }
+      ES.selected.clear();
+      render();
+      atualizarPainelSentar();
+      toast(idInscrito ? 'Inscrito atribuído a ' + codigo + ' (não publicado).' : 'Lugar ' + codigo + ' libertado (não publicado).', 'ok');
+    }
+
+    function aplicarEstadoSel(estado) {
+      if (ES.selected.size === 0) { toast('Selecciona lugares primeiro.', 'err'); return; }
+      ES.selected.forEach(id => {
+        if (estado === 'free') ES.estados.delete(id);
+        else ES.estados.set(id, estado);
+      });
+      ES.selected.clear();
+      render();
+      toast('Estado actualizado em ' + ES.estados.size + ' lugar(es).', 'ok');
+    }
+
+    // ════ Carregamento e persistência ════
+    function carregarDoEvento() {
+      const e = ST.evento || {};
+      const sala = e.sala || {};
+      // Mapeia config a partir de evento.sala se possivel; senao usa defaults
+      ES.cfg.tipo = sala.tipo === 'retangular' ? 'retangular' : 'auditorio';
+      if (sala.editorCfg) {
+        // Configuração nativa do editor guardada anteriormente
+        ES.cfg = { ...DEFAULT_CFG, ...sala.editorCfg };
+      }
+      // Estados/ocupações: ler de ST.inscritos[].lugar
+      ES.ocupacoes.clear();
+      ES.estados.clear();
+      ST.inscritos.forEach(i => {
+        if (i.lugar) ES.ocupacoes.set(String(i.lugar), i.id);
+      });
+      atualizarUIFromCfg();
+      render();
+      setTimeout(fit, 50);
+    }
+
+    async function aplicarEPublicar() {
+      const ok = await confirmar('Aplicar e publicar planta', 'Vai guardar a planta em evento.json e actualizar as atribuições de lugar em inscritos.json. Continuar?');
+      if (!ok) return;
+      setLoading(true, 'A publicar planta…');
+      try {
+        // 1. evento.json: actualizar sala.layout, sala.lugares, sala.tipo, sala.viewBox, sala.editorCfg
+        const e = ST.evento || (ST.evento = eventoDefault());
+        if (!e.sala) e.sala = {};
+        e.sala.tipo = ES.cfg.tipo;
+        e.sala.layout = ES.seats.map(s => ({ lugar: s.codigo, fila: s.fila, x: Math.round(s.x*10)/10, y: Math.round(s.y*10)/10 }));
+        e.sala.lugares = ES.seats.map(s => s.codigo);
+        e.sala.totalLugares = ES.seats.length;
+        e.sala.viewBox = `0 0 ${Math.ceil(ES.bounds.w)} ${Math.ceil(ES.bounds.h)}`;
+        e.sala.editorCfg = { ...ES.cfg };
+        e.actualizadoEm = nowIso();
+        ST.eventoSha = await ghEscreverComRetry(
+          'data/evento.json', () => e, () => ST.eventoSha,
+          'sala: planta actualizada via editor · ' + nowIso()
+        );
+        ST.evento = e;
+        // 2. inscritos.json: actualizar campo lugar com as ocupacoes locais
+        const inscritosAtuais = JSON.parse(JSON.stringify(ST.inscritos));
+        ST.inscritosSha = await ghEscreverComRetry(
+          'data/inscritos.json',
+          () => ({
+            schema: 'inscritos@2',
+            eventoId: e.id,
+            actualizadoEm: nowIso(),
+            total: inscritosAtuais.length,
+            inscritos: inscritosAtuais
+          }),
+          () => ST.inscritosSha,
+          'inscritos: atribuicoes via editor de planta · ' + nowIso()
+        );
+        ST.inscritosUltimoPublicado = JSON.parse(JSON.stringify(inscritosAtuais));
+        toast('Planta e atribuições publicadas.', 'ok');
+        atualizarBadges();
+        if (typeof renderSala === 'function') renderSala();
+      } catch (err) {
+        toast('Erro: ' + err.message, 'err');
+      }
+      setLoading(false);
+    }
+
+    // ════ Sliders / UI ════
+    function atualizarUIFromCfg() {
+      $$('button[data-ed-tipo]').forEach(b => b.classList.toggle('on', b.dataset.edTipo === ES.cfg.tipo));
+      // (re)criar sliders
+      const cont = document.getElementById('ed-sliders');
+      if (!cont) return;
+      cont.innerHTML = SLIDERS.filter(s => !s[5] || s[5] === ES.cfg.tipo).map(([prop, label, min, max, step]) => `
+        <div style="margin-bottom:10px">
+          <label style="display:block;font-size:11px;color:var(--texto-mute);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;margin-bottom:4px">${label}</label>
+          <div style="display:grid;grid-template-columns:1fr 50px;gap:6px;align-items:center">
+            <input type="range" min="${min}" max="${max}" step="${step}" value="${ES.cfg[prop]}" data-ed-prop="${prop}" style="width:100%;accent-color:var(--rsb-vermelho)">
+            <span style="text-align:right;font-size:12px;color:var(--texto-mute);font-variant-numeric:tabular-nums" data-ed-val="${prop}">${ES.cfg[prop]}</span>
+          </div>
+        </div>
+      `).join('') + `
+        <div style="margin-top:10px;padding:8px;background:#fff;border:1px solid var(--linha);border-radius:5px;display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="ed-cfg-palco" ${ES.cfg.palco ? 'checked' : ''}>
+          <label for="ed-cfg-palco" style="margin:0;text-transform:none;letter-spacing:0;font-size:12px;font-weight:400">Mostrar palco / zona frontal</label>
+        </div>
+      `;
+      cont.querySelectorAll('input[type=range][data-ed-prop]').forEach(el => {
+        el.addEventListener('input', () => {
+          const prop = el.dataset.edProp;
+          ES.cfg[prop] = parseInt(el.value, 10);
+          const val = cont.querySelector('[data-ed-val="' + prop + '"]');
+          if (val) val.textContent = el.value;
+          render();
+        });
+      });
+      const palcoEl = document.getElementById('ed-cfg-palco');
+      if (palcoEl) palcoEl.addEventListener('change', () => { ES.cfg.palco = palcoEl.checked; render(); });
+    }
+
+    function fit() {
+      const wrap = document.getElementById('ed-canvas-wrap');
+      const svg = document.getElementById('ed-svg');
+      if (!wrap || !svg) return;
+      const r = wrap.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const { w, h } = ES.bounds;
+      ES.zoom = Math.min(r.width / w, r.height / h) * 0.95;
+      ES.pan = { x: (r.width - w * ES.zoom) / 2, y: (r.height - h * ES.zoom) / 2 };
+      const vbW = w / ES.zoom, vbH = h / ES.zoom;
+      const vbX = -ES.pan.x / ES.zoom, vbY = -ES.pan.y / ES.zoom;
+      svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+      const zEl = document.getElementById('ed-zoom-level');
+      if (zEl) zEl.textContent = Math.round(ES.zoom * 100) + '%';
+    }
+
+    function initPanZoom() {
+      const svg = document.getElementById('ed-svg');
+      if (!svg) return;
+      let drag = false, sp = null, sm = null;
+      svg.addEventListener('mousedown', e => {
+        if (e.target.closest('.ed-seat')) return;
+        drag = true; svg.style.cursor = 'grabbing';
+        sp = { ...ES.pan }; sm = { x: e.clientX, y: e.clientY };
+      });
+      window.addEventListener('mousemove', e => {
+        if (!drag) return;
+        ES.pan = { x: sp.x + e.clientX - sm.x, y: sp.y + e.clientY - sm.y };
+        const { w, h } = ES.bounds;
+        const vbW = w / ES.zoom, vbH = h / ES.zoom;
+        svg.setAttribute('viewBox', `${(-ES.pan.x/ES.zoom)} ${(-ES.pan.y/ES.zoom)} ${vbW} ${vbH}`);
+      });
+      window.addEventListener('mouseup', () => { drag = false; svg.style.cursor = 'grab'; });
+      svg.addEventListener('wheel', e => {
+        if (!ES.activado) return;
+        e.preventDefault();
+        const delta = -Math.sign(e.deltaY) * 0.1;
+        const old = ES.zoom;
+        const nz = Math.max(0.2, Math.min(8, old * (1 + delta)));
+        const rect = svg.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const f = nz / old;
+        ES.pan.x = mx - (mx - ES.pan.x) * f;
+        ES.pan.y = my - (my - ES.pan.y) * f;
+        ES.zoom = nz;
+        const { w, h } = ES.bounds;
+        svg.setAttribute('viewBox', `${(-ES.pan.x/ES.zoom)} ${(-ES.pan.y/ES.zoom)} ${w/ES.zoom} ${h/ES.zoom}`);
+        const zEl = document.getElementById('ed-zoom-level');
+        if (zEl) zEl.textContent = Math.round(ES.zoom * 100) + '%';
+      }, { passive: false });
+    }
+
+    function exportJSON() {
+      const payload = {
+        schema: 'sala-editor@1',
+        geradoEm: nowIso(),
+        config: ES.cfg,
+        bounds: ES.bounds,
+        palco: ES.palcoConfig,
+        centro: ES.centro || null,
+        filas: ES.rows.map(r => ({
+          label: r.label,
+          raio: r.raio || null,
+          lugares: r.slots.map(s => ({
+            codigo: s.codigo, fila: s.fila, lugar: s.lugar,
+            x: Math.round(s.x*10)/10, y: Math.round(s.y*10)/10,
+            estado: ES.estados.get(s.id) || (ES.ocupacoes.has(s.codigo) ? 'ocupado' : (String(s.lugar).startsWith('R') ? 'reservado' : 'free')),
+            idInscrito: ES.ocupacoes.get(s.codigo) || null
+          }))
+        })),
+        aisles: ES.aisles
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'planta-sala.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      toast('JSON exportado.', 'ok');
+    }
+    function exportSVG() {
+      const svg = document.getElementById('ed-svg');
+      const clone = svg.cloneNode(true);
+      let str = new XMLSerializer().serializeToString(clone);
+      const { w, h } = ES.bounds;
+      str = str.replace('<svg', `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"`);
+      str = str.replace(/viewBox="[^"]*"/, `viewBox="0 0 ${w} ${h}"`);
+      const blob = new Blob([str], { type: 'image/svg+xml' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'planta-sala.svg';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      toast('SVG exportado.', 'ok');
+    }
+    function exportPNG() {
+      const svg = document.getElementById('ed-svg');
+      const clone = svg.cloneNode(true);
+      let str = new XMLSerializer().serializeToString(clone);
+      const { w, h } = ES.bounds;
+      str = str.replace('<svg', `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"`);
+      str = str.replace(/viewBox="[^"]*"/, `viewBox="0 0 ${w} ${h}"`);
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = w * scale; canvas.height = h * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const img = new Image();
+      const blob = new Blob([str], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(b => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(b);
+          a.download = 'planta-sala.png';
+          a.click();
+          URL.revokeObjectURL(a.href);
+          URL.revokeObjectURL(url);
+          toast('PNG exportado.', 'ok');
+        }, 'image/png');
+      };
+      img.src = url;
+    }
+    function importJSON(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (data.config) ES.cfg = { ...DEFAULT_CFG, ...data.config };
+          ES.estados.clear();
+          atualizarUIFromCfg();
+          render();
+          if (data.filas) {
+            const codMap = new Map();
+            ES.seats.forEach(s => codMap.set(s.codigo, s.id));
+            data.filas.forEach(f => f.lugares.forEach(l => {
+              const id = codMap.get(l.codigo);
+              if (id && l.estado && l.estado !== 'free' && l.estado !== 'ocupado') {
+                ES.estados.set(id, l.estado);
+              }
+            }));
+            render();
+          }
+          toast('JSON importado.', 'ok');
+        } catch (e) {
+          toast('Erro a ler JSON: ' + e.message, 'err');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function bindUIOnce() {
+      if (ES.iniciaisLoaded) return;
+      ES.iniciaisLoaded = true;
+      // Tipo
+      $$('button[data-ed-tipo]').forEach(b => {
+        b.addEventListener('click', () => {
+          ES.cfg.tipo = b.dataset.edTipo;
+          atualizarUIFromCfg();
+          render();
+          setTimeout(fit, 30);
+        });
+      });
+      // Presets
+      const presets = [['ed-preset-aud', 'aud'], ['ed-preset-cinema', 'cinema'], ['ed-preset-teatro', 'teatro'], ['ed-preset-conf', 'conf']];
+      presets.forEach(([id, key]) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', () => {
+          ES.cfg = { ...DEFAULT_CFG, ...PRESETS_ED[key] };
+          ES.estados.clear(); ES.selected.clear();
+          atualizarUIFromCfg(); render(); setTimeout(fit, 30);
+          toast('Preset aplicado: ' + key, 'ok');
+        });
+      });
+      // Recarregar
+      const load = document.getElementById('ed-load-evento');
+      if (load) load.addEventListener('click', carregarDoEvento);
+      // Zoom
+      const zin = document.getElementById('ed-zoom-in');
+      if (zin) zin.addEventListener('click', () => { ES.zoom = Math.min(8, ES.zoom * 1.2); render(); });
+      const zout = document.getElementById('ed-zoom-out');
+      if (zout) zout.addEventListener('click', () => { ES.zoom = Math.max(0.2, ES.zoom / 1.2); render(); });
+      const zf = document.getElementById('ed-fit');
+      if (zf) zf.addEventListener('click', fit);
+      // Estado da selecção
+      const bf = document.getElementById('ed-sel-livre'); if (bf) bf.addEventListener('click', () => aplicarEstadoSel('free'));
+      const br = document.getElementById('ed-sel-reservado'); if (br) br.addEventListener('click', () => aplicarEstadoSel('reservado'));
+      const bv = document.getElementById('ed-sel-vip'); if (bv) bv.addEventListener('click', () => aplicarEstadoSel('vip'));
+      const bc = document.getElementById('ed-sel-clear'); if (bc) bc.addEventListener('click', () => { ES.selected.clear(); render(); atualizarPainelSentar(); });
+      // Busca sentar
+      const buscaEl = document.getElementById('ed-sentar-busca');
+      if (buscaEl) buscaEl.addEventListener('input', atualizarPainelSentar);
+      // Export / Import
+      const eJson = document.getElementById('sala-ed-export-json'); if (eJson) eJson.addEventListener('click', exportJSON);
+      const eSvg = document.getElementById('sala-ed-export-svg'); if (eSvg) eSvg.addEventListener('click', exportSVG);
+      const ePng = document.getElementById('sala-ed-export-png'); if (ePng) ePng.addEventListener('click', exportPNG);
+      const iBtn = document.getElementById('sala-ed-importar');
+      const iFile = document.getElementById('sala-ed-file');
+      if (iBtn && iFile) {
+        iBtn.addEventListener('click', () => iFile.click());
+        iFile.addEventListener('change', e => { if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value = ''; });
+      }
+      // Aplicar
+      const aplicarBtn = document.getElementById('sala-ed-aplicar');
+      if (aplicarBtn) aplicarBtn.addEventListener('click', aplicarEPublicar);
+      // Pan / zoom
+      initPanZoom();
+    }
+
+    function activar() {
+      bindUIOnce();
+      if (!ES.activado) {
+        ES.activado = true;
+        carregarDoEvento();
+      } else {
+        // Re-render para acompanhar mudanças em ST
+        ES.ocupacoes.clear();
+        ST.inscritos.forEach(i => { if (i.lugar) ES.ocupacoes.set(String(i.lugar), i.id); });
+        render();
+      }
+    }
+
+    return { activar, render, carregar: carregarDoEvento };
+  })();
 
   // ═══════════════════════════════════════════════════════════════════════════
   // BOOT

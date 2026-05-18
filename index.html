@@ -505,6 +505,7 @@
 <nav class="tabs">
   <button data-tab="dashboard" class="active">Dashboard</button>
   <button data-tab="setup">Setup</button>
+  <button data-tab="sala">🎨 Sala <span class="badge" id="badge-sala">0</span></button>
   <button data-tab="inscritos">Inscritos <span class="badge" id="badge-inscritos">0</span></button>
   <button data-tab="presencas">Presenças <span class="badge" id="badge-presencas">0</span></button>
   <button data-tab="emissao">Emissão <span class="badge" id="badge-emissao">0</span></button>
@@ -820,6 +821,99 @@
       </div>
     </div>
 
+  </section>
+
+  <!-- ════════════ SALA / EDITOR DE PLANTAS ════════════ -->
+  <section class="tab-panel" id="tab-sala">
+    <div class="panel" style="padding:0;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--linha);display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <h2 style="margin:0;font-size:16px">Planta da sala</h2>
+          <p class="lead" style="margin:4px 0 0;font-size:12.5px">Desenhe a sala, marque inscritos em lugares, exporte para o evento.</p>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn secondary" id="sala-ed-importar">⤓ Importar JSON</button>
+          <input type="file" id="sala-ed-file" accept=".json,application/json" style="display:none">
+          <button class="btn secondary" id="sala-ed-export-json">⇩ JSON</button>
+          <button class="btn secondary" id="sala-ed-export-svg">⇩ SVG</button>
+          <button class="btn secondary" id="sala-ed-export-png">⇩ PNG</button>
+          <button class="btn" id="sala-ed-aplicar">💾 Aplicar e publicar</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:260px 1fr 260px;min-height:600px">
+        <!-- Painel de configuração à esquerda -->
+        <div id="sala-ed-config" style="background:#fafafa;border-right:1px solid var(--linha);padding:14px;overflow-y:auto;max-height:75vh;font-size:13px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--texto-mute);font-weight:700;margin-bottom:8px;border-bottom:1px solid var(--linha);padding-bottom:6px">Tipo de Sala</div>
+          <div style="display:flex;gap:6px;margin-bottom:14px">
+            <button class="btn secondary on" data-ed-tipo="auditorio" style="flex:1">🎭 Auditório</button>
+            <button class="btn secondary" data-ed-tipo="retangular" style="flex:1">🎬 Recto</button>
+          </div>
+
+          <div id="ed-sliders"></div>
+
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--texto-mute);font-weight:700;margin:16px 0 8px;border-bottom:1px solid var(--linha);padding-bottom:6px">Predefinições</div>
+          <button class="btn secondary" id="ed-preset-aud" style="width:100%;margin-bottom:6px">🎭 Auditório 200</button>
+          <button class="btn secondary" id="ed-preset-cinema" style="width:100%;margin-bottom:6px">🎬 Cinema</button>
+          <button class="btn secondary" id="ed-preset-teatro" style="width:100%;margin-bottom:6px">🎪 Teatro grande</button>
+          <button class="btn secondary" id="ed-preset-conf" style="width:100%">🏛️ Conferência</button>
+
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--texto-mute);font-weight:700;margin:16px 0 8px;border-bottom:1px solid var(--linha);padding-bottom:6px">Estado actual</div>
+          <button class="btn secondary" id="ed-load-evento" style="width:100%">↻ Recarregar do evento</button>
+          <p class="small" style="font-size:11px;color:var(--texto-mute);margin-top:6px;line-height:1.4">Repõe a planta a partir do <code>evento.sala</code> guardado.</p>
+        </div>
+
+        <!-- Canvas central -->
+        <div id="ed-canvas-wrap" style="position:relative;overflow:hidden;background:#f8fafc;background-image:linear-gradient(rgba(0,0,0,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,0.03) 1px,transparent 1px);background-size:20px 20px">
+          <svg id="ed-svg" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block;cursor:grab"></svg>
+          <div style="position:absolute;right:12px;top:12px;background:#fff;border:1px solid var(--linha);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+            <button id="ed-zoom-in" class="btn secondary" style="width:30px;height:30px;padding:0;font-size:14px">+</button>
+            <div id="ed-zoom-level" style="font-size:9.5px;text-align:center;color:var(--texto-mute);padding:2px 0">100%</div>
+            <button id="ed-zoom-out" class="btn secondary" style="width:30px;height:30px;padding:0;font-size:14px">−</button>
+            <button id="ed-fit" class="btn secondary" style="width:30px;height:30px;padding:0;font-size:11px">⤢</button>
+          </div>
+        </div>
+
+        <!-- Painel direito: stats + selecção + sentar inscrito -->
+        <div style="background:#fafafa;border-left:1px solid var(--linha);padding:14px;overflow-y:auto;max-height:75vh;font-size:13px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--texto-mute);font-weight:700;margin-bottom:8px;border-bottom:1px solid var(--linha);padding-bottom:6px">Estatísticas</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
+            <div class="stat-card"><div class="n" id="ed-s-total">0</div><div class="l">Lugares</div></div>
+            <div class="stat-card"><div class="n" id="ed-s-filas">0</div><div class="l">Filas</div></div>
+            <div class="stat-card aviso"><div class="n" id="ed-s-livres">0</div><div class="l">Livres</div></div>
+            <div class="stat-card pres"><div class="n" id="ed-s-ocupados">0</div><div class="l">Ocupados</div></div>
+          </div>
+
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--texto-mute);font-weight:700;margin:14px 0 8px;border-bottom:1px solid var(--linha);padding-bottom:6px">Selecção</div>
+          <div style="background:#fff;border:1px solid var(--linha);border-radius:6px;padding:10px;font-size:12px;margin-bottom:10px">
+            <div>Lugares: <strong id="ed-sel-count" style="color:var(--rsb-vermelho)">0</strong></div>
+            <div id="ed-sel-detail" style="margin-top:4px;font-size:11px;color:var(--texto-mute);max-height:60px;overflow-y:auto"></div>
+          </div>
+
+          <div id="ed-sentar-panel" style="display:none;background:#fff;border:1px solid var(--rsb-vermelho);border-radius:6px;padding:10px;margin-bottom:10px">
+            <div style="font-weight:700;font-size:12.5px;margin-bottom:6px">Sentar inscrito</div>
+            <input type="search" id="ed-sentar-busca" placeholder="Pesquisar nome…" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--linha);border-radius:5px;font-family:inherit;margin-bottom:6px">
+            <div id="ed-sentar-lista" style="max-height:200px;overflow-y:auto;border:1px solid var(--linha);border-radius:5px;background:#fafafa"></div>
+          </div>
+
+          <div style="display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap">
+            <button class="btn secondary" id="ed-sel-livre" style="flex:1 1 calc(50% - 2px);padding:6px;font-size:11px">Livre</button>
+            <button class="btn secondary" id="ed-sel-reservado" style="flex:1 1 calc(50% - 2px);padding:6px;font-size:11px">Reservado</button>
+            <button class="btn secondary" id="ed-sel-vip" style="flex:1 1 calc(50% - 2px);padding:6px;font-size:11px">VIP</button>
+            <button class="btn secondary" id="ed-sel-clear" style="flex:1 1 calc(50% - 2px);padding:6px;font-size:11px">Limpar sel.</button>
+          </div>
+
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--texto-mute);font-weight:700;margin:14px 0 8px;border-bottom:1px solid var(--linha);padding-bottom:6px">Legenda</div>
+          <div style="display:flex;flex-direction:column;gap:5px;font-size:11.5px">
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:12px;background:#cbd5e1;border:1.5px solid #64748b;border-radius:3px"></span> Livre</div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:12px;background:#fde047;border:1.5px solid #b45309;border-radius:3px"></span> Reservado (R*)</div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:12px;background:#c084fc;border:1.5px solid #7c3aed;border-radius:3px"></span> VIP</div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:12px;background:#60a5fa;border:1.5px solid #1d4ed8;border-radius:3px"></span> Ocupado (com nome)</div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:12px;background:#ef4444;border:1.5px solid #b91c1c;border-radius:3px"></span> Seleccionado</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- ════════════ INSCRITOS ════════════ -->
