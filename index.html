@@ -782,6 +782,7 @@
             <a class="btn secondary" href="https://rsblisboa.github.io/Presencas/mapa-sala.html" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">🗺️ Mapa da sala (visual)</a>
             <a class="btn secondary" href="https://rsblisboa.github.io/Certificados/p.html?demo=1" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">📱 Página participante (demo)</a>
             <a class="btn secondary" href="https://github.com/RSBLisboa/Presencas/issues" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">🐙 Issues (workflow)</a>
+            <button class="btn secondary" id="btn-pos-evento" style="grid-column:1/-1">📧 Acompanhamento pós-evento (Outlook)</button>
             <button class="btn secondary" id="dash-reload" style="grid-column:1/-1">↻ Recarregar dados</button>
           </div>
           <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--texto-mute);margin:18px 0 8px">Inscritos com email</h3>
@@ -1471,12 +1472,358 @@
   </div>
 </div>
 
+<!-- Modal: Acompanhamento pós-evento (mailto: Outlook) -->
+<div class="modal hide" id="modal-pos-evento">
+  <div class="card" style="max-width:1000px;max-height:90vh;overflow-y:auto">
+    <h2>Acompanhamento pós-evento</h2>
+    <p style="font-size:13px;color:var(--texto-mute);margin:0 0 12px">Abre o Outlook Classic com um e-mail pré-preenchido por destinatário. Compatível com o cliente desktop instalado no PC.</p>
+
+    <div style="display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--linha)">
+      <button class="btn secondary" id="pe-tab-nao" data-grupo="nao_respondentes" style="border-bottom:3px solid transparent;border-radius:6px 6px 0 0">Presentes que não responderam</button>
+      <button class="btn secondary" id="pe-tab-aus" data-grupo="ausentes" style="border-bottom:3px solid transparent;border-radius:6px 6px 0 0">Inscritos ausentes</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--texto-mute);margin-bottom:4px">Assunto</label>
+        <input type="text" id="pe-assunto" style="width:100%;padding:8px 10px;border:1px solid var(--linha);border-radius:6px;font-family:inherit;margin-bottom:10px">
+        <label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--texto-mute);margin-bottom:4px">Corpo do e-mail <span style="text-transform:none;color:var(--texto-mute);font-weight:400">(<code>{{nome}}</code>, <code>{{link}}</code>, <code>{{titulo}}</code>, <code>{{data}}</code>)</span></label>
+        <textarea id="pe-corpo" rows="18" style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:6px;font-family:inherit;font-size:13px;line-height:1.5;resize:vertical"></textarea>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+          <label style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--texto-mute)">Destinatários</label>
+          <span id="pe-resumo" style="font-size:12px;color:var(--texto-mute)"></span>
+        </div>
+        <div style="margin-bottom:8px;display:flex;gap:6px">
+          <button class="btn secondary" id="pe-select-all" style="font-size:12px;padding:4px 8px">Marcar todos</button>
+          <button class="btn secondary" id="pe-select-none" style="font-size:12px;padding:4px 8px">Desmarcar</button>
+        </div>
+        <div id="pe-lista" style="background:#fafafa;border:1px solid var(--linha);border-radius:6px;max-height:380px;overflow-y:auto;padding:4px"></div>
+        <div id="pe-sem-email" style="margin-top:10px;font-size:12px;color:var(--texto-mute)"></div>
+      </div>
+    </div>
+
+    <div class="actions" style="margin-top:18px;gap:8px;flex-wrap:wrap">
+      <button class="btn secondary" id="pe-fechar" style="flex:0 0 auto">Fechar</button>
+      <span style="flex:1"></span>
+      <button class="btn secondary" id="pe-preview" style="flex:0 0 auto">Pré-visualizar 1º</button>
+      <button class="btn" id="pe-abrir-prox" style="flex:0 0 auto">Abrir próximo no Outlook ↗</button>
+      <button class="btn" id="pe-abrir-todos" style="flex:0 0 auto">Abrir todos sequencialmente ↗</button>
+    </div>
+    <div id="pe-progresso" style="margin-top:10px;font-size:13px;color:var(--texto-mute)"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <div id="loading" class="hide"><div class="spinner"></div><div id="loading-text" style="font-size:14px;color:var(--texto-mute)">A carregar…</div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/app.js"></script>
+
+<!-- Acompanhamento pós-evento (mailto: Outlook) -->
+<script>
+(function() {
+  'use strict';
+  const RAW = 'https://raw.githubusercontent.com/RSBLisboa/Presencas/main/data';
+  const LINK_BASE = 'https://rsblisboa.github.io/Certificados/p.html?t=';
+  const STORAGE_KEY = 'pe-templates-v1';
+
+  const TPL_DEFAULT = {
+    nao_respondentes: {
+      assunto: 'Sessão Técnica em Substâncias Perigosas - a sua opinião conta',
+      corpo:
+'Cara/o {{nome}},\n\n' +
+'Em primeiro lugar, o nosso obrigado por ter estado presente na Sessão Técnica em Substâncias Perigosas, no passado dia {{data}}, no Auditório do Metropolitano de Lisboa.\n\n' +
+'A sua participação foi importante para nós. Para podermos continuar a melhorar e a desenhar futuras sessões cada vez mais úteis para a sua actividade profissional, gostaríamos de pedir-lhe dois minutos para responder a um pequeno questionário de apreciação. São apenas seis perguntas de escolha rápida e a sua opinião ajuda-nos genuinamente.\n\n' +
+'Pode aceder através da sua página pessoal do evento, onde encontra também o link para o certificado de participação:\n\n' +
+'{{link}}\n\n' +
+'Caso já tenha respondido nas últimas horas, peça desculpa pelo lembrete e ignore esta mensagem.\n\n' +
+'Para qualquer questão ou dificuldade no preenchimento, basta responder a este e-mail.\n\n' +
+'Com os melhores cumprimentos,\n\n' +
+'A organização\n' +
+'Regimento de Sapadores Bombeiros de Lisboa'
+    },
+    ausentes: {
+      assunto: 'Sentimos a sua falta na Sessão Técnica em Substâncias Perigosas',
+      corpo:
+'Cara/o {{nome}},\n\n' +
+'No passado dia {{data}}, realizou-se a Sessão Técnica em Substâncias Perigosas, no Auditório do Metropolitano de Lisboa, para a qual tínhamos contado com a sua presença.\n\n' +
+'Sentimos a sua falta. Compreendemos que imprevistos surgem e que nem sempre é possível conciliar agendas, mas quisemos só dizer-lhe que esperávamos por si e que a sua participação seria bem-vinda.\n\n' +
+'Estamos a preparar novas iniciativas técnicas e gostaríamos de continuar a contar consigo. Caso queira partilhar connosco algum motivo ou sugestão para edições futuras, basta responder a este e-mail.\n\n' +
+'Com os melhores cumprimentos,\n\n' +
+'A organização\n' +
+'Regimento de Sapadores Bombeiros de Lisboa'
+    }
+  };
+
+  let dados = null;
+  let grupoActivo = 'nao_respondentes';
+  let destinatariosActuais = [];
+  let proximoIdx = 0;
+  let templates = carregarTemplates();
+
+  function carregarTemplates() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const t = JSON.parse(raw);
+        return {
+          nao_respondentes: Object.assign({}, TPL_DEFAULT.nao_respondentes, t.nao_respondentes || {}),
+          ausentes: Object.assign({}, TPL_DEFAULT.ausentes, t.ausentes || {})
+        };
+      }
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(TPL_DEFAULT));
+  }
+
+  function gravarTemplates() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(templates)); } catch (e) {}
+  }
+
+  function primeiroNome(nome) {
+    if (!nome) return '';
+    const partes = String(nome).trim().split(/\s+/);
+    if (!partes.length) return '';
+    const ignorar = ['major','tenente','capitão','capitao','coronel','sargento','dr','dra','prof','sr','sra','eng','eng.','arq','engº','engª'];
+    let i = 0;
+    while (i < partes.length - 1 && ignorar.includes(partes[i].toLowerCase().replace(/\.$/,''))) i++;
+    return partes[i];
+  }
+
+  async function carregarDados() {
+    if (dados) return dados;
+    const [evRes, insRes, presRes, aprRes] = await Promise.all([
+      fetch(RAW + '/evento.json?t=' + Date.now()),
+      fetch(RAW + '/inscritos.json?t=' + Date.now()),
+      fetch(RAW + '/presencas.json?t=' + Date.now()),
+      fetch(RAW + '/apreciacao.json?t=' + Date.now())
+    ]);
+    const evento = await evRes.json();
+    const ins = await insRes.json();
+    const pres = await presRes.json();
+    const apr = await aprRes.json();
+    dados = {
+      evento,
+      inscritos: ins.inscritos || [],
+      presentes: new Set((pres.marcacoes || []).filter(m => m.presente).map(m => m.idInscricao)),
+      respondentes: new Set((apr.respostas || []).map(r => r.idInscricao))
+    };
+    return dados;
+  }
+
+  function calcularDestinatarios(grupo) {
+    const efectivos = dados.inscritos.filter(p => p.estado !== 'Anulado');
+    let lista;
+    if (grupo === 'nao_respondentes') {
+      lista = efectivos.filter(p => dados.presentes.has(p.id) && !dados.respondentes.has(p.id));
+    } else {
+      lista = efectivos.filter(p => !dados.presentes.has(p.id));
+    }
+    const comEmail = lista.filter(p => (p.email || '').trim());
+    const semEmail = lista.filter(p => !(p.email || '').trim());
+    return { comEmail, semEmail };
+  }
+
+  function renderLista() {
+    const grupo = grupoActivo;
+    const tpl = templates[grupo];
+    document.getElementById('pe-assunto').value = tpl.assunto;
+    document.getElementById('pe-corpo').value = tpl.corpo;
+
+    const { comEmail, semEmail } = calcularDestinatarios(grupo);
+    destinatariosActuais = comEmail;
+    proximoIdx = 0;
+
+    const lista = document.getElementById('pe-lista');
+    lista.innerHTML = '';
+    comEmail.forEach((p, idx) => {
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid #eee;font-size:13px;cursor:pointer';
+      row.innerHTML =
+        '<input type="checkbox" data-idx="' + idx + '" checked style="flex:0 0 auto">' +
+        '<span style="flex:1"><strong>' + escapeHtml(p.nome || '(sem nome)') + '</strong><br>' +
+        '<span style="color:var(--texto-mute);font-size:11px">' + escapeHtml(p.email) + ' · ' + escapeHtml(p.entidade || '') + '</span></span>' +
+        '<button type="button" class="btn secondary" data-abrir="' + idx + '" style="font-size:11px;padding:3px 8px;flex:0 0 auto">Outlook ↗</button>';
+      lista.appendChild(row);
+    });
+    if (!comEmail.length) {
+      lista.innerHTML = '<div style="padding:20px;text-align:center;color:var(--texto-mute);font-size:13px">Nenhum destinatário com email para este grupo.</div>';
+    }
+
+    document.getElementById('pe-resumo').textContent = comEmail.length + ' com email';
+    const semEm = document.getElementById('pe-sem-email');
+    if (semEmail.length) {
+      semEm.innerHTML = '<strong>' + semEmail.length + ' inscritos sem email:</strong> ' +
+        semEmail.map(p => escapeHtml(p.nome || ('id=' + p.id))).join(', ');
+    } else {
+      semEm.innerHTML = '';
+    }
+    document.getElementById('pe-progresso').textContent = '';
+    actualizarTabsActivas();
+  }
+
+  function actualizarTabsActivas() {
+    document.querySelectorAll('#modal-pos-evento [data-grupo]').forEach(btn => {
+      const activo = btn.dataset.grupo === grupoActivo;
+      btn.style.borderBottomColor = activo ? 'var(--rsb-vermelho)' : 'transparent';
+      btn.style.background = activo ? '#fff5f5' : '';
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function montarMailto(p) {
+    const assunto = document.getElementById('pe-assunto').value;
+    const corpo = document.getElementById('pe-corpo').value;
+    const titulo = (dados.evento.titulo || dados.evento.evento && dados.evento.evento.titulo || '');
+    const data = (dados.evento.data || dados.evento.evento && dados.evento.evento.data || '');
+    const link = LINK_BASE + (p.token || '');
+    const substituir = txt => String(txt || '')
+      .replace(/\{\{nome\}\}/g, primeiroNome(p.nome))
+      .replace(/\{\{link\}\}/g, link)
+      .replace(/\{\{titulo\}\}/g, titulo)
+      .replace(/\{\{data\}\}/g, formatarData(data));
+    const url = 'mailto:' + encodeURIComponent(p.email) +
+      '?subject=' + encodeURIComponent(substituir(assunto)) +
+      '&body=' + encodeURIComponent(substituir(corpo));
+    return url;
+  }
+
+  function formatarData(s) {
+    if (!s) return '';
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return s;
+    return m[3] + '-' + m[2] + '-' + m[1];
+  }
+
+  function destinatariosSeleccionados() {
+    const checks = document.querySelectorAll('#pe-lista input[type=checkbox]');
+    const sel = [];
+    checks.forEach((c, i) => { if (c.checked) sel.push(destinatariosActuais[i]); });
+    return sel;
+  }
+
+  function abrirMailto(p) {
+    const url = montarMailto(p);
+    window.location.href = url;
+  }
+
+  function actualizarProgresso() {
+    const sel = destinatariosSeleccionados();
+    document.getElementById('pe-progresso').textContent =
+      'Próximo: ' + (sel[proximoIdx] ? (sel[proximoIdx].nome || sel[proximoIdx].email) : '(fim da lista)') +
+      ' · abertos ' + Math.min(proximoIdx, sel.length) + '/' + sel.length;
+  }
+
+  function abrir(btnEl) {
+    btnEl.addEventListener('click', async () => {
+      try {
+        btnEl.disabled = true;
+        await carregarDados();
+        templates = carregarTemplates();
+        grupoActivo = 'nao_respondentes';
+        renderLista();
+        document.getElementById('modal-pos-evento').classList.remove('hide');
+      } catch (e) {
+        alert('Erro ao carregar dados: ' + e.message);
+      } finally {
+        btnEl.disabled = false;
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('btn-pos-evento');
+    if (btn) abrir(btn);
+
+    document.getElementById('pe-fechar').addEventListener('click', () => {
+      document.getElementById('modal-pos-evento').classList.add('hide');
+    });
+
+    document.querySelectorAll('#modal-pos-evento [data-grupo]').forEach(b => {
+      b.addEventListener('click', () => {
+        const g = b.dataset.grupo;
+        templates[grupoActivo].assunto = document.getElementById('pe-assunto').value;
+        templates[grupoActivo].corpo = document.getElementById('pe-corpo').value;
+        gravarTemplates();
+        grupoActivo = g;
+        renderLista();
+      });
+    });
+
+    ['pe-assunto','pe-corpo'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => {
+        templates[grupoActivo].assunto = document.getElementById('pe-assunto').value;
+        templates[grupoActivo].corpo = document.getElementById('pe-corpo').value;
+        gravarTemplates();
+      });
+    });
+
+    document.getElementById('pe-select-all').addEventListener('click', () => {
+      document.querySelectorAll('#pe-lista input[type=checkbox]').forEach(c => c.checked = true);
+    });
+    document.getElementById('pe-select-none').addEventListener('click', () => {
+      document.querySelectorAll('#pe-lista input[type=checkbox]').forEach(c => c.checked = false);
+    });
+
+    document.getElementById('pe-lista').addEventListener('click', e => {
+      const t = e.target;
+      if (t && t.dataset && t.dataset.abrir != null) {
+        e.preventDefault();
+        const idx = parseInt(t.dataset.abrir, 10);
+        const p = destinatariosActuais[idx];
+        if (p) abrirMailto(p);
+      }
+    });
+
+    document.getElementById('pe-preview').addEventListener('click', () => {
+      const sel = destinatariosSeleccionados();
+      if (!sel.length) { alert('Sem destinatários seleccionados.'); return; }
+      const p = sel[0];
+      const titulo = (dados.evento.titulo || '');
+      const data = formatarData(dados.evento.data || '');
+      const link = LINK_BASE + (p.token || '');
+      const corpo = document.getElementById('pe-corpo').value
+        .replace(/\{\{nome\}\}/g, primeiroNome(p.nome))
+        .replace(/\{\{link\}\}/g, link)
+        .replace(/\{\{titulo\}\}/g, titulo)
+        .replace(/\{\{data\}\}/g, data);
+      const assunto = document.getElementById('pe-assunto').value
+        .replace(/\{\{nome\}\}/g, primeiroNome(p.nome))
+        .replace(/\{\{titulo\}\}/g, titulo)
+        .replace(/\{\{data\}\}/g, data);
+      alert('PARA: ' + p.email + '\nASSUNTO: ' + assunto + '\n\n' + corpo);
+    });
+
+    document.getElementById('pe-abrir-prox').addEventListener('click', () => {
+      const sel = destinatariosSeleccionados();
+      if (!sel.length) { alert('Sem destinatários seleccionados.'); return; }
+      if (proximoIdx >= sel.length) { proximoIdx = 0; }
+      const p = sel[proximoIdx];
+      abrirMailto(p);
+      proximoIdx++;
+      actualizarProgresso();
+    });
+
+    document.getElementById('pe-abrir-todos').addEventListener('click', async () => {
+      const sel = destinatariosSeleccionados();
+      if (!sel.length) { alert('Sem destinatários seleccionados.'); return; }
+      if (!confirm('Vai abrir ' + sel.length + ' janelas do Outlook (uma por destinatário) com intervalo de 1,2s. Continuar?')) return;
+      for (let i = 0; i < sel.length; i++) {
+        abrirMailto(sel[i]);
+        proximoIdx = i + 1;
+        document.getElementById('pe-progresso').textContent = 'A abrir ' + (i+1) + '/' + sel.length + ': ' + (sel[i].nome || sel[i].email);
+        await new Promise(r => setTimeout(r, 1200));
+      }
+      document.getElementById('pe-progresso').textContent = 'Concluído: ' + sel.length + ' emails abertos no Outlook.';
+    });
+  });
+})();
+</script>
 
 </body>
 </html>
